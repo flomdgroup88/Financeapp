@@ -11,7 +11,7 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "finance.db"))
+DB_PATH = os.path.join(os.path.dirname(__file__), "finance.db")
 
 
 # ──────────────────────────────────────────────
@@ -574,8 +574,9 @@ def stats_comparison():
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
+init_db()  # called at module level so gunicorn runs it too
+
 if __name__ == "__main__":
-    init_db()
     port  = int(os.environ.get("PORT", 5000))
     debug = bool(int(os.environ.get("DEBUG", 1)))
     print(f"🚀  Finance Mini App → http://localhost:{port}")
