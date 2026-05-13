@@ -11,7 +11,7 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "finance.db")
+DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "finance.db"))
 
 
 # ──────────────────────────────────────────────
