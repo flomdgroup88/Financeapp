@@ -1,5 +1,5 @@
 """
-Finance Telegram Mini App — Flask backend v2
+Finance Telegram Mini App — Flask backend v3
 Run: python app.py
 """
 
@@ -19,11 +19,6 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")   # Required in production
 # Telegram initData verification (HMAC-SHA256)
 # ──────────────────────────────────────────────
 def verify_telegram_init_data(init_data_raw: str):
-    """
-    Verify Telegram Mini App initData signature.
-    Returns user_id (str) on success, None on failure.
-    https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
-    """
     if not init_data_raw:
         return None
     try:
@@ -45,12 +40,10 @@ def verify_telegram_init_data(init_data_raw: str):
 
 @app.before_request
 def authenticate():
-    """Verify Telegram initData on every API call; populate g.user_id."""
     if request.path == "/" or not request.path.startswith("/api"):
         return
 
     if not BOT_TOKEN:
-        # Dev mode: BOT_TOKEN not set → skip verification, use fixed dev user
         g.user_id = "dev"
         _seed_user_if_new("dev")
         return
@@ -65,7 +58,6 @@ def authenticate():
 
 
 def _seed_user_if_new(user_id: str):
-    """Seed default accounts/categories/subscriptions for a first-time user."""
     db = sqlite3.connect(DB_PATH)
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA journal_mode=WAL")
@@ -73,7 +65,7 @@ def _seed_user_if_new(user_id: str):
 
     if db.execute("SELECT 1 FROM accounts WHERE user_id=? LIMIT 1", (user_id,)).fetchone():
         db.close()
-        return  # Already seeded
+        return
 
     db.execute(
         "INSERT OR IGNORE INTO settings(user_id,key,value) VALUES(?,?,?)",
@@ -99,7 +91,6 @@ def _seed_user_if_new(user_id: str):
             (user_id, name, amt, cur, period, next_d, bd, ico, color, desc),
         )
 
-    # Demo transactions — resolve account/category ids for this user
     accs = db.execute("SELECT id FROM accounts WHERE user_id=? ORDER BY sort_order", (user_id,)).fetchall()
     cats = db.execute("SELECT id FROM categories WHERE user_id=? ORDER BY sort_order", (user_id,)).fetchall()
     if accs and cats:
@@ -126,6 +117,18 @@ def _seed_user_if_new(user_id: str):
             db.execute(
                 "INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
                 (user_id, acc, cat, amt, tp, desc, dt),
+            )
+
+        # Default budget limits for new users
+        budget_defaults = [
+            (ci(0), 15000),  # Продукты
+            (ci(1),  8000),  # Рестораны
+            (ci(4),  6000),  # Бензин
+        ]
+        for cat_id, limit_amt in budget_defaults:
+            db.execute(
+                "INSERT OR IGNORE INTO budget_limits(user_id,category_id,amount) VALUES(?,?,?)",
+                (user_id, cat_id, limit_amt),
             )
 
     db.commit()
@@ -166,7 +169,6 @@ def commit():
     get_db().commit()
 
 def uid():
-    """Current user_id from request context."""
     return g.user_id
 
 
@@ -243,6 +245,15 @@ CREATE TABLE IF NOT EXISTS planned_income (
     created_at    TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS budget_limits (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT NOT NULL DEFAULT 'default',
+    category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    amount      REAL NOT NULL,
+    created_at  TEXT DEFAULT (datetime('now')),
+    UNIQUE(user_id, category_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_tx_user    ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_tx_date    ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_type    ON transactions(type);
@@ -251,6 +262,7 @@ CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
 CREATE INDEX IF NOT EXISTS idx_acc_user   ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_cat_user   ON categories(user_id);
 CREATE INDEX IF NOT EXISTS idx_sub_user   ON subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_bl_user    ON budget_limits(user_id);
 """
 
 DEFAULT_ACCOUNTS = [
@@ -318,12 +330,10 @@ def migrate_db():
     """Safe migrations for existing databases."""
     db = sqlite3.connect(DB_PATH)
     migrations = [
-        # Legacy columns (v1→v2)
         "ALTER TABLE accounts       ADD COLUMN is_reserve   INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE subscriptions  ADD COLUMN billing_day  INTEGER",
         "ALTER TABLE subscriptions  ADD COLUMN account_id   INTEGER REFERENCES accounts(id) ON DELETE SET NULL",
         "ALTER TABLE transactions   ADD COLUMN paired_tx_id INTEGER",
-        # Multi-user: add user_id to every table
         "ALTER TABLE settings       ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'",
         "ALTER TABLE accounts       ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'",
         "ALTER TABLE categories     ADD COLUMN user_id TEXT NOT NULL DEFAULT 'default'",
@@ -334,12 +344,22 @@ def migrate_db():
         "CREATE INDEX IF NOT EXISTS idx_acc_user ON accounts(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_cat_user ON categories(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_sub_user ON subscriptions(user_id)",
+        # v3 migrations
+        """CREATE TABLE IF NOT EXISTS budget_limits (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     TEXT NOT NULL DEFAULT 'default',
+            category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+            amount      REAL NOT NULL,
+            created_at  TEXT DEFAULT (datetime('now')),
+            UNIQUE(user_id, category_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_bl_user ON budget_limits(user_id)",
     ]
     for sql in migrations:
         try:
             db.execute(sql)
         except Exception:
-            pass  # Column/index already exists
+            pass
     db.commit()
     db.close()
 
@@ -489,6 +509,7 @@ def categories():
 def category_item(cid):
     if request.method == "DELETE":
         q("UPDATE transactions SET category_id=NULL WHERE category_id=? AND user_id=?", (cid, uid()))
+        q("DELETE FROM budget_limits WHERE category_id=? AND user_id=?", (cid, uid()))
         q("DELETE FROM categories WHERE id=? AND user_id=?", (cid, uid()))
         commit()
         return jsonify({"ok": True})
@@ -570,15 +591,104 @@ def transactions():
     return jsonify({"ok": True, "id": get_db().lastrowid})
 
 
-@app.route("/api/transactions/<int:tid>", methods=["DELETE"])
+@app.route("/api/transactions/<int:tid>", methods=["DELETE", "PUT"])
 def transaction_item(tid):
-    row = qone("SELECT * FROM transactions WHERE id=? AND user_id=?", (tid, uid()))
-    if row:
-        if row["account_id"] and row["type"] in ("expense", "income"):
-            delta = row["amount"] if row["type"] == "expense" else -row["amount"]
-            q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?", (delta, row["account_id"], uid()))
-        q("DELETE FROM transactions WHERE id=? AND user_id=?", (tid, uid()))
+    if request.method == "DELETE":
+        row = qone("SELECT * FROM transactions WHERE id=? AND user_id=?", (tid, uid()))
+        if row:
+            if row["account_id"] and row["type"] in ("expense", "income"):
+                delta = row["amount"] if row["type"] == "expense" else -row["amount"]
+                q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?", (delta, row["account_id"], uid()))
+            q("DELETE FROM transactions WHERE id=? AND user_id=?", (tid, uid()))
+            commit()
+        return jsonify({"ok": True})
+
+    # PUT — edit transaction
+    old = qone("SELECT * FROM transactions WHERE id=? AND user_id=?", (tid, uid()))
+    if not old:
+        return jsonify({"error": "not found"}), 404
+
+    d          = request.get_json(force=True)
+    new_amount = float(d.get("amount", old["amount"]))
+    new_acc_id = d.get("account_id", old["account_id"])
+    new_cat_id = d.get("category_id", old["category_id"])
+    new_type   = d.get("type", old["type"])
+    new_date   = d.get("date", old["date"])
+    new_desc   = d.get("description", old["description"] or "")
+
+    # Transfers can't be edited (they're paired)
+    if old["type"] == "transfer":
+        return jsonify({"error": "transfers cannot be edited"}), 400
+
+    # Reverse old balance effect
+    if old["account_id"] and old["type"] in ("expense", "income"):
+        delta = old["amount"] if old["type"] == "expense" else -old["amount"]
+        q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?",
+          (delta, old["account_id"], uid()))
+
+    # Apply new balance effect
+    if new_acc_id and new_type in ("expense", "income"):
+        delta = -new_amount if new_type == "expense" else new_amount
+        q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?",
+          (delta, new_acc_id, uid()))
+
+    q("""UPDATE transactions
+         SET account_id=?, category_id=?, amount=?, type=?, description=?, date=?
+         WHERE id=? AND user_id=?""",
+      (new_acc_id, new_cat_id, new_amount, new_type, new_desc, new_date, tid, uid()))
+
+    commit()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────────
+# Budget Limits
+# ──────────────────────────────────────────────
+@app.route("/api/budget-limits", methods=["GET", "POST"])
+def budget_limits():
+    if request.method == "GET":
+        year  = int(request.args.get("year",  date.today().year))
+        month = int(request.args.get("month", date.today().month))
+        start = f"{year}-{month:02d}-01"
+        end   = f"{year}-{month:02d}-31"
+        limits = qall(
+            """SELECT bl.id, bl.category_id, bl.amount,
+                      c.name AS category_name, c.icon AS category_icon, c.color AS category_color,
+                      COALESCE(SUM(t.amount), 0) AS spent
+               FROM budget_limits bl
+               JOIN categories c ON c.id = bl.category_id
+               LEFT JOIN transactions t
+                  ON t.category_id = bl.category_id
+                  AND t.user_id = bl.user_id
+                  AND t.type = 'expense'
+                  AND t.date >= ? AND t.date <= ?
+               WHERE bl.user_id = ?
+               GROUP BY bl.id
+               ORDER BY c.sort_order, c.id""",
+            (start, end, uid()))
+        return jsonify({"budget_limits": limits})
+
+    d      = request.get_json(force=True)
+    cat_id = d.get("category_id")
+    amount = float(d.get("amount", 0))
+    if not cat_id:
+        return jsonify({"error": "category_id required"}), 400
+    if amount <= 0:
+        # Delete the limit if amount is 0
+        q("DELETE FROM budget_limits WHERE user_id=? AND category_id=?", (uid(), cat_id))
         commit()
+        return jsonify({"ok": True, "deleted": True})
+    q("INSERT INTO budget_limits(user_id, category_id, amount) VALUES(?,?,?) "
+      "ON CONFLICT(user_id, category_id) DO UPDATE SET amount=excluded.amount",
+      (uid(), cat_id, amount))
+    commit()
+    return jsonify({"ok": True, "id": get_db().lastrowid})
+
+
+@app.route("/api/budget-limits/<int:bid>", methods=["DELETE"])
+def budget_limit_item(bid):
+    q("DELETE FROM budget_limits WHERE id=? AND user_id=?", (bid, uid()))
+    commit()
     return jsonify({"ok": True})
 
 
@@ -796,8 +906,8 @@ migrate_db()
 
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT",  5000))
-    debug = bool(int(os.environ.get("DEBUG", 0)))   # ← production-safe default
-    print(f"🚀  Finance Mini App v2 → http://localhost:{port}")
+    debug = bool(int(os.environ.get("DEBUG", 0)))
+    print(f"🚀  Finance Mini App v3 → http://localhost:{port}")
     if not BOT_TOKEN:
         print("⚠️   BOT_TOKEN not set — running in dev mode (no auth, user_id='dev')")
     app.run(host="0.0.0.0", port=port, debug=debug)
