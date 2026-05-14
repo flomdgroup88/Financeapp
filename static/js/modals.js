@@ -1,7 +1,8 @@
 import { S, fmtRub, toRub, today, withLoading } from './state.js';
 import { GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, loadAll } from './api.js';
-import { ICONS_ACC, ICONS_SUB, ICONS_CAT } from './config.js';
+import { ICONS_ACC, ICONS_SUB, ICONS_CAT, MONTHS } from './config.js';
 import { renderIconPicker, renderColorPicker } from './pickers.js';
+import { renderTxList } from './components.js';
 
 // ─── MODAL HELPERS ───────────────────────────────────────────
 export const openModal  = id => document.getElementById(id).classList.add('show');
@@ -402,8 +403,6 @@ export async function deleteCat() {
 }
 
 // ─── CHART DRILLDOWN ────────────────────────────────────────
-import { renderTxList } from './components.js';
-import { MONTHS } from './config.js';
 
 export async function openChartDetail(catId, catName, catIcon, catColor, startDate, endDate) {
   haptic();
@@ -489,9 +488,7 @@ export async function openBudgetsModal(year, month) {
   const limitMap = {};
   limits.forEach(bl => { limitMap[bl.category_id] = bl; });
 
-  const { fmtRub } = await import('./state.js');
-  const MONTHS_ARR = ['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-  document.getElementById('budgets-modal-title').textContent = `Бюджеты — ${MONTHS_ARR[month]}`;
+  document.getElementById('budgets-modal-title').textContent = `Бюджеты — ${MONTHS[month]}`;
 
   const body = document.getElementById('budgets-modal-body');
   body.innerHTML = `
