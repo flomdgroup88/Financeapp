@@ -513,12 +513,18 @@ const ICONS_CAT = ['🛒','🍽️','👕','⚽','⛽','🔧','🏠','🎮','�
 
 // ─── API ────────────────────────────────────────────────────
 const API = window.location.origin;
+// Pass Telegram initData on every request so the backend can verify identity.
+const TG_INIT_DATA = tg?.initData || '';
 async function req(method, path, body) {
   const r = await fetch(API+path,{
     method,
-    headers:{'Content-Type':'application/json'},
+    headers:{
+      'Content-Type':'application/json',
+      'X-Telegram-Init-Data': TG_INIT_DATA,
+    },
     body:body?JSON.stringify(body):undefined
   });
+  if (r.status === 401) { console.error('Unauthorized — initData invalid or missing'); return {}; }
   return r.json();
 }
 const GET  = p     => req('GET',p);
