@@ -1,9 +1,9 @@
 """
-Finance Telegram Mini App — Flask backend
+Finance Telegram Mini App — Flask backend v2
 Run: python app.py
 """
 
-import os, json, sqlite3
+import os, json, sqlite3, calendar
 from datetime import datetime, date, timedelta
 from flask import Flask, g, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS accounts (
     icon        TEXT NOT NULL DEFAULT '💰',
     color       TEXT NOT NULL DEFAULT '#6366f1',
     is_priority INTEGER NOT NULL DEFAULT 0,
+    is_reserve  INTEGER NOT NULL DEFAULT 0,
     sort_order  INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT DEFAULT (date('now'))
 );
@@ -85,7 +86,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     account_id   INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
     category_id  INTEGER REFERENCES categories(id) ON DELETE SET NULL,
     amount       REAL NOT NULL,
-    type         TEXT NOT NULL CHECK(type IN ('expense','income')),
+    type         TEXT NOT NULL CHECK(type IN ('expense','income','transfer')),
     description  TEXT,
     date         TEXT NOT NULL DEFAULT (date('now')),
     created_at   TEXT DEFAULT (datetime('now'))
@@ -98,6 +99,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     currency    TEXT NOT NULL DEFAULT 'RUB',
     period      TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('monthly','yearly')),
     next_date   TEXT,
+    billing_day INTEGER,
+    account_id  INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
     description TEXT,
     icon        TEXT NOT NULL DEFAULT '🔔',
     color       TEXT NOT NULL DEFAULT '#6366f1',
@@ -120,11 +123,12 @@ CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
 """
 
 DEFAULT_ACCOUNTS = [
-    ("Наличные",    1000, "RUB", "💵", "#10b981", 0, 1),
-    ("Т-Банк",      5000, "RUB", "🏦", "#6366f1", 1, 2),
-    ("Альфа Банк",  2000, "RUB", "🔴", "#ef4444", 0, 3),
-    ("Сбербанк",    3000, "RUB", "🟢", "#22c55e", 0, 4),
-    ("Доллары",      100, "USD", "💵", "#f59e0b", 0, 5),
+    ("Наличные",    1000, "RUB", "💵", "#10b981", 0, 0, 1),
+    ("Т-Банк",      5000, "RUB", "🏦", "#6366f1", 1, 0, 2),
+    ("Альфа Банк",  2000, "RUB", "🔴", "#ef4444", 0, 0, 3),
+    ("Сбербанк",    3000, "RUB", "🟢", "#22c55e", 0, 0, 4),
+    ("Доллары",      100, "USD", "💵", "#f59e0b", 0, 0, 5),
+    ("Резервный",   15000, "RUB", "🏦", "#64748b", 0, 1, 6),
 ]
 
 DEFAULT_CATEGORIES = [
@@ -153,10 +157,26 @@ DEFAULT_CATEGORIES = [
 ]
 
 DEFAULT_SUBS = [
-    ("Яндекс Плюс",  299, "RUB", "monthly", "🎵", "#ef4444",  "Музыка, фильмы, такси"),
-    ("iCloud",       149, "RUB", "monthly", "☁️", "#0ea5e9",  "50 GB хранилища"),
-    ("ChatGPT Plus", 20,  "USD", "monthly", "🤖", "#10b981",  "GPT-4"),
+    ("Яндекс Плюс",  299, "RUB", "monthly", "🎵", "#ef4444", "Музыка, фильмы, такси", 15),
+    ("iCloud",       149, "RUB", "monthly", "☁️", "#0ea5e9", "50 GB хранилища", 1),
+    ("ChatGPT Plus",  20, "USD", "monthly", "🤖", "#10b981", "GPT-4", 20),
 ]
+
+
+def calc_next_date_from_billing_day(billing_day, base_date=None):
+    """Calculate next billing date from a day-of-month."""
+    today_dt = base_date or date.today()
+    bd = int(billing_day)
+    last_day = calendar.monthrange(today_dt.year, today_dt.month)[1]
+    day = min(bd, last_day)
+    if today_dt.day <= day:
+        return date(today_dt.year, today_dt.month, day).isoformat()
+    else:
+        nm = today_dt.month + 1 if today_dt.month < 12 else 1
+        ny = today_dt.year if today_dt.month < 12 else today_dt.year + 1
+        last_day_nm = calendar.monthrange(ny, nm)[1]
+        day_nm = min(bd, last_day_nm)
+        return date(ny, nm, day_nm).isoformat()
 
 
 def init_db():
@@ -165,18 +185,15 @@ def init_db():
     db.executescript(SCHEMA)
     db.commit()
 
-    # Settings
     db.execute("INSERT OR IGNORE INTO settings VALUES ('usd_rate','90')")
 
-    # Accounts
     if not db.execute("SELECT 1 FROM accounts LIMIT 1").fetchone():
-        for name, bal, cur, ico, color, prio, sord in DEFAULT_ACCOUNTS:
+        for name, bal, cur, ico, color, prio, rsrv, sord in DEFAULT_ACCOUNTS:
             db.execute(
-                "INSERT INTO accounts(name,balance,currency,icon,color,is_priority,sort_order) VALUES(?,?,?,?,?,?,?)",
-                (name, bal, cur, ico, color, prio, sord),
+                "INSERT INTO accounts(name,balance,currency,icon,color,is_priority,is_reserve,sort_order) VALUES(?,?,?,?,?,?,?,?)",
+                (name, bal, cur, ico, color, prio, rsrv, sord),
             )
 
-    # Categories
     if not db.execute("SELECT 1 FROM categories LIMIT 1").fetchone():
         for name, ico, color, sord in DEFAULT_CATEGORIES:
             db.execute(
@@ -184,28 +201,25 @@ def init_db():
                 (name, ico, color, sord),
             )
 
-    # Subscriptions
     if not db.execute("SELECT 1 FROM subscriptions LIMIT 1").fetchone():
-        next_m = (date.today().replace(day=1) + timedelta(days=32)).replace(day=1).isoformat()
-        for name, amt, cur, period, ico, color, desc in DEFAULT_SUBS:
+        for name, amt, cur, period, ico, color, desc, bd in DEFAULT_SUBS:
+            next_d = calc_next_date_from_billing_day(bd)
             db.execute(
-                "INSERT INTO subscriptions(name,amount,currency,period,next_date,icon,color,description) VALUES(?,?,?,?,?,?,?,?)",
-                (name, amt, cur, period, next_m, ico, color, desc),
+                "INSERT INTO subscriptions(name,amount,currency,period,next_date,billing_day,icon,color,description) VALUES(?,?,?,?,?,?,?,?,?)",
+                (name, amt, cur, period, next_d, bd, ico, color, desc),
             )
 
-    # Demo transactions (current month)
     if not db.execute("SELECT 1 FROM transactions LIMIT 1").fetchone():
         today_str = date.today().isoformat()
         y, m = date.today().year, date.today().month
-        # grab first tbank-like account (id 2) and some categories
         demo = [
-            (2, 1, 3500, "expense", "Пятёрочка",   f"{y}-{m:02d}-02"),
+            (2, 1, 3500, "expense", "Пятёрочка",    f"{y}-{m:02d}-02"),
             (2, 2, 1200, "expense", "Кофе с другом", f"{y}-{m:02d}-04"),
-            (2, 5, 2800, "expense", "Заправка",     f"{y}-{m:02d}-05"),
-            (2, 1, 4100, "expense", "Перекрёсток",  f"{y}-{m:02d}-08"),
-            (2, 8, 600,  "expense", "Steam",        f"{y}-{m:02d}-10"),
-            (2, None, 85000, "income", "Зарплата",  f"{y}-{m:02d}-01"),
-            (2, None, 5000,  "income", "Фриланс",   f"{y}-{m:02d}-06"),
+            (2, 5, 2800, "expense", "Заправка",      f"{y}-{m:02d}-05"),
+            (2, 1, 4100, "expense", "Перекрёсток",   f"{y}-{m:02d}-08"),
+            (2, 8,  600, "expense", "Steam",         f"{y}-{m:02d}-10"),
+            (2, None, 85000, "income", "Зарплата",   f"{y}-{m:02d}-01"),
+            (2, None,  5000, "income", "Фриланс",    f"{y}-{m:02d}-06"),
         ]
         for acc, cat, amt, tp, desc, dt in demo:
             db.execute(
@@ -213,15 +227,14 @@ def init_db():
                 (acc, cat, amt, tp, desc, dt),
             )
 
-        # Prior month comparison data
         prev_m = m - 1 if m > 1 else 12
         prev_y = y if m > 1 else y - 1
         prev_demo = [
-            (2, 1, 2800, "expense", "Продукты",     f"{prev_y}-{prev_m:02d}-05"),
-            (2, 2, 900,  "expense", "Ресторан",     f"{prev_y}-{prev_m:02d}-12"),
-            (2, 5, 3100, "expense", "Бензин",       f"{prev_y}-{prev_m:02d}-18"),
-            (2, 8, 1200, "expense", "Игры",         f"{prev_y}-{prev_m:02d}-20"),
-            (2, None, 85000, "income", "Зарплата",  f"{prev_y}-{prev_m:02d}-01"),
+            (2, 1, 2800, "expense", "Продукты",    f"{prev_y}-{prev_m:02d}-05"),
+            (2, 2,  900, "expense", "Ресторан",    f"{prev_y}-{prev_m:02d}-12"),
+            (2, 5, 3100, "expense", "Бензин",      f"{prev_y}-{prev_m:02d}-18"),
+            (2, 8, 1200, "expense", "Игры",        f"{prev_y}-{prev_m:02d}-20"),
+            (2, None, 85000, "income", "Зарплата", f"{prev_y}-{prev_m:02d}-01"),
         ]
         for acc, cat, amt, tp, desc, dt in prev_demo:
             db.execute(
@@ -229,6 +242,24 @@ def init_db():
                 (acc, cat, amt, tp, desc, dt),
             )
 
+    db.commit()
+    db.close()
+
+
+def migrate_db():
+    """Safe migrations for existing databases."""
+    db = sqlite3.connect(DB_PATH)
+    migrations = [
+        "ALTER TABLE accounts ADD COLUMN is_reserve INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE subscriptions ADD COLUMN billing_day INTEGER",
+        "ALTER TABLE subscriptions ADD COLUMN account_id INTEGER REFERENCES accounts(id) ON DELETE SET NULL",
+        "ALTER TABLE transactions ADD COLUMN paired_tx_id INTEGER",  # for transfers
+    ]
+    for sql in migrations:
+        try:
+            db.execute(sql)
+        except Exception:
+            pass  # Column already exists
     db.commit()
     db.close()
 
@@ -267,10 +298,13 @@ def accounts():
     d = request.get_json(force=True)
     if d.get("is_priority"):
         q("UPDATE accounts SET is_priority=0")
+    max_order = qone("SELECT COALESCE(MAX(sort_order),0) AS v FROM accounts")["v"]
     q(
-        "INSERT INTO accounts(name,balance,currency,icon,color,is_priority) VALUES(?,?,?,?,?,?)",
+        "INSERT INTO accounts(name,balance,currency,icon,color,is_priority,is_reserve,sort_order) VALUES(?,?,?,?,?,?,?,?)",
         (d["name"], d.get("balance", 0), d.get("currency", "RUB"),
-         d.get("icon", "💰"), d.get("color", "#6366f1"), int(bool(d.get("is_priority")))),
+         d.get("icon", "💰"), d.get("color", "#6366f1"),
+         int(bool(d.get("is_priority"))), int(bool(d.get("is_reserve"))),
+         max_order + 1),
     )
     commit()
     return jsonify({"ok": True, "id": get_db().lastrowid})
@@ -286,13 +320,81 @@ def account_item(aid):
     if d.get("is_priority"):
         q("UPDATE accounts SET is_priority=0")
     q(
-        "UPDATE accounts SET name=?,balance=?,currency=?,icon=?,color=?,is_priority=? WHERE id=?",
+        "UPDATE accounts SET name=?,balance=?,currency=?,icon=?,color=?,is_priority=?,is_reserve=? WHERE id=?",
         (d["name"], d.get("balance", 0), d.get("currency", "RUB"),
          d.get("icon", "💰"), d.get("color", "#6366f1"),
-         int(bool(d.get("is_priority"))), aid),
+         int(bool(d.get("is_priority"))), int(bool(d.get("is_reserve"))), aid),
     )
     commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/accounts/<int:aid>/move", methods=["PUT"])
+def account_move(aid):
+    """Move account up or down in sort order."""
+    d = request.get_json(force=True)
+    direction = d.get("direction", "up")
+    row = qone("SELECT id, sort_order FROM accounts WHERE id=?", (aid,))
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    current = row["sort_order"]
+    if direction == "up":
+        other = qone("SELECT id, sort_order FROM accounts WHERE sort_order < ? ORDER BY sort_order DESC LIMIT 1", (current,))
+    else:
+        other = qone("SELECT id, sort_order FROM accounts WHERE sort_order > ? ORDER BY sort_order ASC LIMIT 1", (current,))
+    if other:
+        q("UPDATE accounts SET sort_order=? WHERE id=?", (other["sort_order"], aid))
+        q("UPDATE accounts SET sort_order=? WHERE id=?", (current, other["id"]))
+        commit()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────────
+# Transfers
+# ──────────────────────────────────────────────
+@app.route("/api/transfers", methods=["POST"])
+def transfers():
+    d = request.get_json(force=True)
+    from_id = d.get("from_id")
+    to_id   = d.get("to_id")
+    amount  = float(d.get("amount", 0))
+    desc    = d.get("description", "")
+    tx_date = d.get("date") or date.today().isoformat()
+
+    if amount <= 0:
+        return jsonify({"error": "amount must be > 0"}), 400
+    if not from_id or not to_id or int(from_id) == int(to_id):
+        return jsonify({"error": "invalid accounts"}), 400
+
+    from_acc = qone("SELECT * FROM accounts WHERE id=?", (from_id,))
+    to_acc   = qone("SELECT * FROM accounts WHERE id=?", (to_id,))
+    if not from_acc or not to_acc:
+        return jsonify({"error": "account not found"}), 404
+
+    cfg = qone("SELECT value FROM settings WHERE key='usd_rate'")
+    usd_rate = float(cfg["value"]) if cfg else 90
+
+    # Convert amount to destination currency
+    if from_acc["currency"] == to_acc["currency"]:
+        to_amount = amount
+    elif from_acc["currency"] == "USD" and to_acc["currency"] == "RUB":
+        to_amount = round(amount * usd_rate, 2)
+    elif from_acc["currency"] == "RUB" and to_acc["currency"] == "USD":
+        to_amount = round(amount / usd_rate, 2)
+    else:
+        to_amount = amount
+
+    q("UPDATE accounts SET balance=balance-? WHERE id=?", (amount, from_id))
+    q("UPDATE accounts SET balance=balance+? WHERE id=?", (to_amount, to_id))
+
+    label = desc or "Перевод"
+    q("INSERT INTO transactions(account_id,category_id,amount,type,description,date) VALUES(?,NULL,?,?,?,?)",
+      (from_id, amount, "transfer", f"{label} → {to_acc['name']}", tx_date))
+    q("INSERT INTO transactions(account_id,category_id,amount,type,description,date) VALUES(?,NULL,?,?,?,?)",
+      (to_id, to_amount, "transfer", f"{label} ← {from_acc['name']}", tx_date))
+
+    commit()
+    return jsonify({"ok": True, "to_amount": to_amount})
 
 
 # ──────────────────────────────────────────────
@@ -320,6 +422,25 @@ def category_item(cid):
     q("UPDATE categories SET name=?,icon=?,color=? WHERE id=?",
       (d["name"], d.get("icon", "📦"), d.get("color", "#6366f1"), cid))
     commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/categories/<int:cid>/move", methods=["PUT"])
+def category_move(cid):
+    d = request.get_json(force=True)
+    direction = d.get("direction", "up")
+    row = qone("SELECT id, sort_order FROM categories WHERE id=?", (cid,))
+    if not row:
+        return jsonify({"error": "not found"}), 404
+    current = row["sort_order"]
+    if direction == "up":
+        other = qone("SELECT id, sort_order FROM categories WHERE sort_order < ? ORDER BY sort_order DESC LIMIT 1", (current,))
+    else:
+        other = qone("SELECT id, sort_order FROM categories WHERE sort_order > ? ORDER BY sort_order ASC LIMIT 1", (current,))
+    if other:
+        q("UPDATE categories SET sort_order=? WHERE id=?", (other["sort_order"], cid))
+        q("UPDATE categories SET sort_order=? WHERE id=?", (current, other["id"]))
+        commit()
     return jsonify({"ok": True})
 
 
@@ -356,12 +477,12 @@ def transactions():
         return jsonify({"transactions": rows})
 
     d = request.get_json(force=True)
-    amount   = float(d.get("amount", 0))
-    acc_id   = d.get("account_id")
-    tx_type  = d.get("type", "expense")
-    tx_date  = d.get("date") or date.today().isoformat()
-    cat_id   = d.get("category_id")
-    desc     = d.get("description", "")
+    amount  = float(d.get("amount", 0))
+    acc_id  = d.get("account_id")
+    tx_type = d.get("type", "expense")
+    tx_date = d.get("date") or date.today().isoformat()
+    cat_id  = d.get("category_id")
+    desc    = d.get("description", "")
 
     if amount <= 0:
         return jsonify({"error": "amount must be > 0"}), 400
@@ -369,7 +490,6 @@ def transactions():
     q("INSERT INTO transactions(account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?)",
       (acc_id, cat_id, amount, tx_type, desc, tx_date))
 
-    # Update account balance
     if acc_id:
         delta = -amount if tx_type == "expense" else amount
         q("UPDATE accounts SET balance=balance+? WHERE id=?", (delta, acc_id))
@@ -382,7 +502,7 @@ def transactions():
 def transaction_item(tid):
     row = qone("SELECT * FROM transactions WHERE id=?", (tid,))
     if row:
-        if row["account_id"]:
+        if row["account_id"] and row["type"] in ("expense", "income"):
             delta = row["amount"] if row["type"] == "expense" else -row["amount"]
             q("UPDATE accounts SET balance=balance+? WHERE id=?", (delta, row["account_id"]))
         q("DELETE FROM transactions WHERE id=?", (tid,))
@@ -398,11 +518,19 @@ def subscriptions():
     if request.method == "GET":
         return jsonify({"subscriptions": qall("SELECT * FROM subscriptions ORDER BY is_active DESC, next_date")})
     d = request.get_json(force=True)
+    billing_day = d.get("billing_day")
+    next_date   = d.get("next_date")
+
+    # Auto-calculate next_date from billing_day for monthly
+    if d.get("period") == "monthly" and billing_day:
+        next_date = calc_next_date_from_billing_day(billing_day)
+
     q(
-        "INSERT INTO subscriptions(name,amount,currency,period,next_date,description,icon,color) VALUES(?,?,?,?,?,?,?,?)",
+        "INSERT INTO subscriptions(name,amount,currency,period,next_date,billing_day,account_id,description,icon,color) VALUES(?,?,?,?,?,?,?,?,?,?)",
         (d["name"], float(d.get("amount", 0)), d.get("currency", "RUB"),
-         d.get("period", "monthly"), d.get("next_date"),
-         d.get("description", ""), d.get("icon", "🔔"), d.get("color", "#6366f1")),
+         d.get("period", "monthly"), next_date, billing_day,
+         d.get("account_id"), d.get("description", ""),
+         d.get("icon", "🔔"), d.get("color", "#6366f1")),
     )
     commit()
     return jsonify({"ok": True, "id": get_db().lastrowid})
@@ -415,11 +543,18 @@ def subscription_item(sid):
         commit()
         return jsonify({"ok": True})
     d = request.get_json(force=True)
+    billing_day = d.get("billing_day")
+    next_date   = d.get("next_date")
+
+    if d.get("period") == "monthly" and billing_day:
+        next_date = calc_next_date_from_billing_day(billing_day)
+
     q(
-        "UPDATE subscriptions SET name=?,amount=?,currency=?,period=?,next_date=?,description=?,icon=?,color=? WHERE id=?",
+        "UPDATE subscriptions SET name=?,amount=?,currency=?,period=?,next_date=?,billing_day=?,account_id=?,description=?,icon=?,color=? WHERE id=?",
         (d["name"], float(d.get("amount", 0)), d.get("currency", "RUB"),
-         d.get("period", "monthly"), d.get("next_date"),
-         d.get("description", ""), d.get("icon", "🔔"), d.get("color", "#6366f1"), sid),
+         d.get("period", "monthly"), next_date, billing_day,
+         d.get("account_id"), d.get("description", ""),
+         d.get("icon", "🔔"), d.get("color", "#6366f1"), sid),
     )
     commit()
     return jsonify({"ok": True})
@@ -430,6 +565,56 @@ def subscription_toggle(sid):
     q("UPDATE subscriptions SET is_active = 1 - is_active WHERE id=?", (sid,))
     commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/subscriptions/<int:sid>/charge", methods=["POST"])
+def subscription_charge(sid):
+    """Manually charge a subscription from the priority (or specified) account."""
+    sub = qone("SELECT * FROM subscriptions WHERE id=?", (sid,))
+    if not sub:
+        return jsonify({"error": "not found"}), 404
+
+    d = request.get_json(force=True) if (request.content_length or 0) > 0 else {}
+    acc_id = d.get("account_id") or sub.get("account_id")
+
+    if not acc_id:
+        prio = qone("SELECT id FROM accounts WHERE is_priority=1 AND is_reserve=0 LIMIT 1")
+        if prio:
+            acc_id = prio["id"]
+
+    if not acc_id:
+        return jsonify({"error": "no account available"}), 400
+
+    amount   = sub["amount"]
+    tx_date  = date.today().isoformat()
+
+    q("INSERT INTO transactions(account_id,category_id,amount,type,description,date) VALUES(?,NULL,?,?,?,?)",
+      (acc_id, amount, "expense", f"Подписка: {sub['name']}", tx_date))
+    q("UPDATE accounts SET balance=balance-? WHERE id=?", (amount, acc_id))
+
+    # Advance next_date
+    if sub["period"] == "monthly":
+        billing_day = sub.get("billing_day") or 1
+        # Move to next month
+        today_dt = date.today()
+        nm = today_dt.month + 1 if today_dt.month < 12 else 1
+        ny = today_dt.year if today_dt.month < 12 else today_dt.year + 1
+        last_day = calendar.monthrange(ny, nm)[1]
+        next_day = min(billing_day, last_day)
+        next_date = date(ny, nm, next_day).isoformat()
+    else:
+        if sub["next_date"]:
+            nd = date.fromisoformat(sub["next_date"])
+            try:
+                next_date = nd.replace(year=nd.year + 1).isoformat()
+            except ValueError:
+                next_date = nd.replace(year=nd.year + 1, day=28).isoformat()
+        else:
+            next_date = (date.today() + timedelta(days=365)).isoformat()
+
+    q("UPDATE subscriptions SET next_date=? WHERE id=?", (next_date, sid))
+    commit()
+    return jsonify({"ok": True, "next_date": next_date, "account_id": acc_id})
 
 
 # ──────────────────────────────────────────────
@@ -512,7 +697,7 @@ def stats_monthly():
 
 
 # ──────────────────────────────────────────────
-# Stats — comparison (current vs previous month)
+# Stats — comparison
 # ──────────────────────────────────────────────
 @app.route("/api/stats/comparison")
 def stats_comparison():
@@ -544,24 +729,17 @@ def stats_comparison():
     all_ids = set(curr_cats) | set(prev_cats)
     comparison = []
     for cid in all_ids:
-        c = curr_cats.get(cid) or prev_cats.get(cid)
+        c      = curr_cats.get(cid) or prev_cats.get(cid)
         curr_a = curr_cats.get(cid, {}).get("total", 0)
         prev_a = prev_cats.get(cid, {}).get("total", 0)
-        if prev_a > 0:
-            pct = round((curr_a - prev_a) / prev_a * 100)
-        elif curr_a > 0:
-            pct = 100
-        else:
-            pct = 0
+        pct    = round((curr_a - prev_a) / prev_a * 100) if prev_a > 0 else (100 if curr_a > 0 else 0)
         comparison.append({
             "id": cid, "name": c["name"], "icon": c["icon"], "color": c["color"],
             "curr_amount": curr_a, "prev_amount": prev_a, "change_pct": pct,
         })
     comparison.sort(key=lambda x: -x["curr_amount"])
 
-    change_pct = 0
-    if prev_total > 0:
-        change_pct = round((curr_total - prev_total) / prev_total * 100)
+    change_pct = round((curr_total - prev_total) / prev_total * 100) if prev_total > 0 else 0
 
     return jsonify({
         "current":    {"total": curr_total},
@@ -574,10 +752,11 @@ def stats_comparison():
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
-init_db()  # called at module level so gunicorn runs it too
+init_db()
+migrate_db()
 
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5000))
     debug = bool(int(os.environ.get("DEBUG", 1)))
-    print(f"🚀  Finance Mini App → http://localhost:{port}")
+    print(f"🚀  Finance Mini App v2 → http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, debug=debug)
