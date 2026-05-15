@@ -285,7 +285,7 @@ export async function renderExpenses() {
   const startDate = `${S.expYear}-${m2}-01`, endDate = `${S.expYear}-${m2}-${lastDay}`;
 
   const mKey  = `/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`;
-  const txKey = `/api/transactions?type=expense&start_date=${startDate}&end_date=${endDate}`;
+  const txKey = `/api/transactions?type=expense&start_date=${startDate}&end_date=${endDate}&limit=200`;
   const blKey = `/api/budget-limits?year=${S.expYear}&month=${S.expMonth}`;
 
   if (!el._hasData) el.innerHTML = `<div class="month-nav" style="margin-bottom:12px">
@@ -449,9 +449,13 @@ export function renderHistory() {
       <input type="date" id="hist-end" class="finput" value="${S.histEnd}">
       <button class="btn btn-secondary btn-sm" id="btn-hist-load">OK</button>
     </div>
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
       ${[['Этот месяц', 0], ['Прошлый', 1], ['3 мес', 3], ['Год', 12]].map(([l, b]) =>
         `<button class="btn btn-secondary btn-sm" data-action="hist-preset" data-months="${b}">${l}</button>`).join('')}
+    </div>
+    <div style="position:relative;margin-bottom:12px">
+      <input type="search" id="hist-search" class="finput" placeholder="🔍 Поиск по описанию..." value="${S.histSearch || ''}"
+        style="padding-left:12px">
     </div>
     <div id="hist-result">
       <div style="text-align:center;color:var(--hint);padding:24px;font-size:13px">Выберите период и нажмите OK</div>
@@ -459,7 +463,13 @@ export function renderHistory() {
   `;
   document.getElementById('hist-start').onchange = e => { S.histStart = e.target.value; };
   document.getElementById('hist-end').onchange   = e => { S.histEnd   = e.target.value; };
-  document.getElementById('btn-hist-load').onclick = () => loadHistoryData();
+  document.getElementById('btn-hist-load').onclick = () => { S.histOffset = 0; loadHistoryData(); };
+  let searchTimer;
+  document.getElementById('hist-search').addEventListener('input', e => {
+    S.histSearch = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { S.histOffset = 0; loadHistoryData(); }, 350);
+  });
 }
 
 export function setHistPreset(monthsBack) {
@@ -474,39 +484,66 @@ export function setHistPreset(monthsBack) {
   const hs = document.getElementById('hist-start'), he = document.getElementById('hist-end');
   if (hs) hs.value = S.histStart;
   if (he) he.value = S.histEnd;
+  S.histOffset = 0;
   loadHistoryData();
 }
 
 export async function loadHistoryData() {
   haptic();
+  if (!S.histOffset) S.histOffset = 0;
+  const LIMIT = 50;
   const res = document.getElementById('hist-result');
-  res.innerHTML = '<div style="text-align:center;color:var(--hint);padding:24px">Загрузка...</div>';
-  const data = await GET(`/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=500`);
-  const txs  = data.transactions || [];
-  if (txs.length === 0) {
+  if (S.histOffset === 0) {
+    res.innerHTML = '<div style="text-align:center;color:var(--hint);padding:24px">Загрузка...</div>';
+  }
+
+  let url = `/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=${LIMIT}&offset=${S.histOffset}`;
+  if (S.histSearch && S.histSearch.trim()) url += `&search=${encodeURIComponent(S.histSearch.trim())}`;
+
+  const data   = await GET(url);
+  const newTxs = data.transactions || [];
+  const stats  = data.stats || {};
+
+  // Accumulate transaction rows for display
+  if (S.histOffset === 0) S.histTxs = [];
+  S.histTxs = (S.histTxs || []).concat(newTxs);
+
+  if (S.histOffset === 0 && newTxs.length === 0) {
     res.innerHTML = '<div class="empty"><div class="empty-ico">🔍</div><div class="empty-text">Нет транзакций за период</div></div>';
     return;
   }
-  const totExp = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const totInc = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const catMap = {};
-  txs.filter(t => t.type === 'expense').forEach(t => {
-    const k = t.category_id || 0;
-    if (!catMap[k]) catMap[k] = { name: t.category_name || 'Прочее', icon: t.category_icon || '📦', color: t.category_color || '#6366f1', total: 0 };
-    catMap[k].total += t.amount;
-  });
-  const catRows = Object.values(catMap).sort((a, b) => b.total - a.total).slice(0, 5);
+
+  // Stats always come from the server (full period, no pagination)
+  const totExp  = stats.total_expense || 0;
+  const totInc  = stats.total_income  || 0;
+  const totCount = stats.total_count  || 0;
+  const topCats = stats.top_categories || [];
+
+  const hasMore    = newTxs.length === LIMIT;
+  const loadedCount = S.histTxs.length;
+  const loadMoreBtn = hasMore
+    ? `<button class="btn btn-secondary" id="btn-hist-more" style="margin:12px auto;display:block">Загрузить ещё (показано ${loadedCount} из ${totCount})</button>`
+    : '';
+
   res.innerHTML = `
     <div class="grid2" style="margin-bottom:10px">
       <div class="card"><div class="card-title">Траты</div><div style="font-size:20px;font-weight:700;color:var(--red)">${fmtRub(totExp)}</div></div>
       <div class="card"><div class="card-title">Доходы</div><div style="font-size:20px;font-weight:700;color:var(--green)">${fmtRub(totInc)}</div></div>
     </div>
-    ${catRows.length > 0 ? `
+    ${topCats.length > 0 && !S.histSearch ? `
     <div class="sec-hdr"><span class="sec-title">Топ категорий</span></div>
     <div class="cat-list" style="margin-bottom:10px">
-      ${catRows.map(c => renderCatRowClickable(c, totExp, S.histStart, S.histEnd)).join('')}
+      ${topCats.map(c => renderCatRowClickable(c, totExp, S.histStart, S.histEnd)).join('')}
     </div>` : ''}
-    <div class="sec-hdr"><span class="sec-title">${txs.length} транзакций</span></div>
-    ${renderTxList(txs)}
+    <div class="sec-hdr"><span class="sec-title">${totCount} транзакций${loadedCount < totCount ? ` · показано ${loadedCount}` : ''}</span></div>
+    ${renderTxList(S.histTxs)}
+    ${loadMoreBtn}
   `;
+
+  if (hasMore) {
+    document.getElementById('btn-hist-more').onclick = () => {
+      S.histOffset = (S.histOffset || 0) + LIMIT;
+      loadHistoryData();
+    };
+  }
 }

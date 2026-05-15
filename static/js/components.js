@@ -15,7 +15,7 @@ export function renderTxList(txs, allowEdit = true) {
     const catN  = isTfr ? 'Перевод' : (t.category_name || (t.type === 'income' ? 'Доход' : 'Прочее'));
     const sign  = t.type === 'expense' ? '−' : t.type === 'income' ? '+' : '';
     const cls   = t.type === 'expense' ? 'exp' : t.type === 'income' ? 'inc' : 'tfr';
-    const editBtn = (!isTfr && allowEdit)
+    const editBtn = allowEdit
       ? `<span class="tx-action-btn" data-action="edit-tx" data-id="${t.id}" title="Редактировать">✎</span>`
       : '';
     html += `<div class="tx-row">

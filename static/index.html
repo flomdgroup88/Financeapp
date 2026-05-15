@@ -424,33 +424,55 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <div class="overlay" id="ov-edit-tx">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-hdr"><h3>✎ Редактировать трату</h3><button class="modal-close" data-close="ov-edit-tx">✕</button></div>
+    <div class="modal-hdr"><h3 id="etx-modal-title">✎ Редактировать трату</h3><button class="modal-close" data-close="ov-edit-tx">✕</button></div>
     <div class="modal-body">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <!-- Normal transaction fields -->
+      <div id="etx-normal-fields">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg"><label>Сумма</label>
+            <input id="etx-amount" class="finput" type="number" placeholder="0" inputmode="decimal"
+              style="font-size:22px;font-weight:700;text-align:center;padding:10px 8px">
+          </div>
+          <div class="fg"><label>Тип</label>
+            <select id="etx-type" class="finput fselect">
+              <option value="expense">💸 Расход</option>
+              <option value="income">💰 Доход</option>
+            </select>
+          </div>
+        </div>
+        <div class="fg"><label>Категория</label>
+          <div id="etx-cat-grid" class="cat-grid"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="fg"><label>Счёт</label>
+            <select id="etx-account" class="finput fselect"></select>
+          </div>
+          <div class="fg"><label>Дата</label>
+            <input id="etx-date" class="finput" type="date">
+          </div>
+        </div>
+        <div class="fg"><label>Комментарий</label>
+          <textarea id="etx-comment" class="finput ftextarea" placeholder="Описание..."></textarea>
+        </div>
+      </div>
+      <!-- Transfer-specific fields -->
+      <div id="etx-transfer-fields" style="display:none">
+        <div class="fg"><label>Откуда</label>
+          <select id="etx-from-account" class="finput fselect"></select>
+        </div>
+        <div class="transfer-arrow">⇓</div>
+        <div class="fg"><label>Куда</label>
+          <select id="etx-to-account" class="finput fselect"></select>
+        </div>
         <div class="fg"><label>Сумма</label>
-          <input id="etx-amount" class="finput" type="number" placeholder="0" inputmode="decimal"
-            style="font-size:22px;font-weight:700;text-align:center;padding:10px 8px">
-        </div>
-        <div class="fg"><label>Тип</label>
-          <select id="etx-type" class="finput fselect">
-            <option value="expense">💸 Расход</option>
-            <option value="income">💰 Доход</option>
-          </select>
-        </div>
-      </div>
-      <div class="fg"><label>Категория</label>
-        <div id="etx-cat-grid" class="cat-grid"></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="fg"><label>Счёт</label>
-          <select id="etx-account" class="finput fselect"></select>
+          <input id="etx-transfer-amount" class="finput amount-big" type="number" placeholder="0" inputmode="decimal">
         </div>
         <div class="fg"><label>Дата</label>
-          <input id="etx-date" class="finput" type="date">
+          <input id="etx-transfer-date" class="finput" type="date">
         </div>
-      </div>
-      <div class="fg"><label>Комментарий</label>
-        <textarea id="etx-comment" class="finput ftextarea" placeholder="Описание..."></textarea>
+        <div class="fg"><label>Описание (необязательно)</label>
+          <input id="etx-transfer-desc" class="finput" placeholder="Перевод...">
+        </div>
       </div>
     </div>
     <div class="modal-footer">

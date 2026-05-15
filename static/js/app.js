@@ -95,7 +95,7 @@ function prefetchAll() {
   // Fire-and-forget — just warm the cache
   GETC(`/api/stats/monthly?year=${y}&month=${m}`);
   GETC('/api/stats/comparison');
-  GETC(`/api/transactions?type=expense&start_date=${start}&end_date=${end}`);
+  GETC(`/api/transactions?type=expense&start_date=${start}&end_date=${end}&limit=200`);
   GETC(`/api/budget-limits?year=${y}&month=${m}`);
 }
 

@@ -105,32 +105,66 @@ export async function openEditTxModal(txId) {
   S.txCatId  = null;
 
   // fetch the tx data
-  const data = await GET(`/api/transactions?limit=500`);
-  const tx   = (data.transactions || []).find(t => t.id === txId);
+  const data = await GET(`/api/transactions/${txId}`);
+  const tx   = data.transaction;
   if (!tx) return;
 
-  document.getElementById('etx-amount').value  = tx.amount;
-  document.getElementById('etx-date').value    = tx.date;
-  document.getElementById('etx-comment').value = tx.description || '';
-  document.getElementById('etx-type').value    = tx.type;
+  const isTransfer = tx.type === 'transfer';
+  document.getElementById('etx-normal-fields').style.display   = isTransfer ? 'none' : '';
+  document.getElementById('etx-transfer-fields').style.display = isTransfer ? '' : 'none';
+  document.getElementById('etx-modal-title').textContent = isTransfer ? '↔️ Редактировать перевод' : '✎ Редактировать транзакцию';
 
-  // Account select
-  const accSel = document.getElementById('etx-account');
-  accSel.innerHTML = S.accounts.map(a =>
-    `<option value="${a.id}" ${a.id === tx.account_id ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
+  if (isTransfer) {
+    const pair = data.pair;
 
-  // Category grid
-  S.txCatId = tx.category_id;
-  const grid = document.getElementById('etx-cat-grid');
-  grid.innerHTML = `<div class="cg-item ${!tx.category_id ? 'sel' : ''}" data-id="" data-action="sel-edit-cat">
-    <span class="cg-ico">🚫</span><span class="cg-lbl">Без кат.</span>
-  </div>` + S.categories.map(c =>
-    `<div class="cg-item ${c.id === tx.category_id ? 'sel' : ''}" data-id="${c.id}" data-action="sel-edit-cat">
-      <span class="cg-ico">${c.icon}</span><span class="cg-lbl">${c.name}</span>
-    </div>`).join('');
+    // Determine from/to: "from" has "→" in description, "to" has "←"
+    const isFrom = tx.description && tx.description.includes('→');
+    const fromTx = isFrom ? tx   : pair;
+    const toTx   = isFrom ? pair : tx;
+
+    const fromSel = document.getElementById('etx-from-account');
+    const toSel   = document.getElementById('etx-to-account');
+    fromSel.innerHTML = S.accounts.map(a =>
+      `<option value="${a.id}" ${a.id === (fromTx?.account_id) ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
+    toSel.innerHTML = S.accounts.map(a =>
+      `<option value="${a.id}" ${a.id === (toTx?.account_id) ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
+
+    document.getElementById('etx-transfer-amount').value = fromTx?.amount || tx.amount;
+    document.getElementById('etx-transfer-date').value   = tx.date;
+    // Extract label from description (strip " → AccountName")
+    const rawDesc = (fromTx?.description || tx.description || '');
+    const labelMatch = rawDesc.match(/^(.*?)\s*→/);
+    document.getElementById('etx-transfer-desc').value  = labelMatch ? labelMatch[1].trim() : '';
+
+    // Store which tx is the "from" side for saving
+    S.editTxFromId = fromTx?.id || txId;
+  } else {
+    document.getElementById('etx-amount').value  = tx.amount;
+    document.getElementById('etx-date').value    = tx.date;
+    document.getElementById('etx-comment').value = tx.description || '';
+    document.getElementById('etx-type').value    = tx.type;
+
+    const accSel = document.getElementById('etx-account');
+    accSel.innerHTML = S.accounts.map(a =>
+      `<option value="${a.id}" ${a.id === tx.account_id ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
+
+    S.txCatId = tx.category_id;
+    const grid = document.getElementById('etx-cat-grid');
+    grid.innerHTML = `<div class="cg-item ${!tx.category_id ? 'sel' : ''}" data-id="" data-action="sel-edit-cat">
+      <span class="cg-ico">🚫</span><span class="cg-lbl">Без кат.</span>
+    </div>` + S.categories.map(c =>
+      `<div class="cg-item ${c.id === tx.category_id ? 'sel' : ''}" data-id="${c.id}" data-action="sel-edit-cat">
+        <span class="cg-ico">${c.icon}</span><span class="cg-lbl">${c.name}</span>
+      </div>`).join('');
+  }
 
   openModal('ov-edit-tx');
-  setTimeout(() => document.getElementById('etx-amount').focus(), 300);
+  setTimeout(() => {
+    const focusEl = isTransfer
+      ? document.getElementById('etx-transfer-amount')
+      : document.getElementById('etx-amount');
+    focusEl?.focus();
+  }, 300);
 }
 
 export function handleSelEditCat(el) {
@@ -141,6 +175,35 @@ export function handleSelEditCat(el) {
 }
 
 export async function saveEditTx() {
+  // Check if we're editing a transfer
+  const transferFields = document.getElementById('etx-transfer-fields');
+  const isTransfer = transferFields && transferFields.style.display !== 'none';
+
+  if (isTransfer) {
+    const amt = parseFloat(document.getElementById('etx-transfer-amount').value);
+    if (!amt || amt <= 0) return;
+    haptic('medium');
+    const body = {
+      account_id:    parseInt(document.getElementById('etx-from-account').value) || null,
+      to_account_id: parseInt(document.getElementById('etx-to-account').value)   || null,
+      amount:        amt,
+      description:   document.getElementById('etx-transfer-desc').value.trim(),
+      date:          document.getElementById('etx-transfer-date').value,
+    };
+    const txId = S.editTxFromId || S.editTxId;
+    await withLoading('btn-save-edit-tx', async () => {
+      const res = await PUT(`/api/transactions/${txId}`, body);
+      if (res.ok) {
+        closeModal('ov-edit-tx');
+        bustTx();
+        await reloadAccounts();
+        window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+        showToast('✅ Перевод обновлён');
+      }
+    });
+    return;
+  }
+
   const amt = parseFloat(document.getElementById('etx-amount').value);
   if (!amt || amt <= 0) return;
   haptic('medium');
@@ -458,7 +521,7 @@ export async function openChartDetail(catId, catName, catIcon, catColor, startDa
   document.getElementById('cd-txlist').innerHTML  = '';
   openModal('ov-chart-detail');
 
-  const data  = await GET(`/api/transactions?category_id=${catId}&start_date=${startDate}&end_date=${endDate}&type=expense`);
+  const data  = await GET(`/api/transactions?category_id=${catId}&start_date=${startDate}&end_date=${endDate}&type=expense&limit=200`);
   const txs   = data.transactions || [];
   const total = txs.reduce((s, t) => s + t.amount, 0);
   const [, m, ] = startDate.split('-');
