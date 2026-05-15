@@ -3,10 +3,13 @@ Finance Telegram Mini App — Flask backend v3
 Run: python app.py
 """
 
-import os, json, sqlite3, calendar, hmac, hashlib, urllib.parse
+import os, json, sqlite3, calendar, hmac, hashlib, urllib.parse, logging
 from datetime import datetime, date, timedelta
-from flask import Flask, g, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
+import backup as bkp
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
 app = Flask(__name__, static_folder="static")
 CORS(app)
@@ -1312,10 +1315,44 @@ def recurring_apply(rid):
 
 
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Backup API
+# ──────────────────────────────────────────────
+
+@app.route("/api/backup/list")
+def api_backup_list():
+    """GET /api/backup/list — список всех резервных копий."""
+    return jsonify({"backups": bkp.list_backups()})
+
+
+@app.route("/api/backup/create", methods=["POST"])
+def api_backup_create():
+    """POST /api/backup/create — создать копию прямо сейчас."""
+    result = bkp.make_backup(label="manual")
+    return jsonify(result), (200 if result["ok"] else 500)
+
+
+@app.route("/api/backup/download/<filename>")
+def api_backup_download(filename: str):
+    """GET /api/backup/download/<filename> — скачать конкретную копию."""
+    path = bkp.get_backup_path(filename)
+    if path is None:
+        return jsonify({"error": "Файл не найден"}), 404
+    return send_file(
+        str(path),
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/octet-stream",
+    )
+
+
+# ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
 init_db()
 migrate_db()
+
+bkp.init(DB_PATH)   # запускаем фоновый таймер резервного копирования
 
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT",  5000))
