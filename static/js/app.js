@@ -36,7 +36,7 @@ async function renderTab(tab) {
   S.tab = tab;
   document.querySelectorAll('.tab-item').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(p =>
+  document.querySelectorAll('.tab').forEach(p =>
     p.classList.toggle('active', p.id === `tab-${tab}`));
 
   switch (tab) {
