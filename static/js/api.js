@@ -1,4 +1,5 @@
 import { S } from './state.js';
+import { getCached, setCached, invalidate } from './cache.js';
 
 // ─── TELEGRAM ───────────────────────────────────────────────
 export const tg     = window.Telegram?.WebApp;
@@ -18,10 +19,40 @@ async function req(method, path, body) {
   if (r.status === 401) { console.error('Unauthorized'); return {}; }
   return r.json();
 }
-export const GET  = p     => req('GET',    p);
-export const POST = (p, b) => req('POST',  p, b);
-export const PUT  = (p, b) => req('PUT',   p, b);
-export const DEL  = p     => req('DELETE', p);
+export const GET  = p      => req('GET',    p);
+export const POST = (p, b) => req('POST',   p, b);
+export const PUT  = (p, b) => req('PUT',    p, b);
+export const DEL  = p      => req('DELETE', p);
+
+// ─── CACHED GET (Stale-While-Revalidate) ────────────────────
+// Returns cached data immediately if available,
+// then refreshes in background and calls onUpdate(newData) if data changed.
+export async function GETC(path, onUpdate) {
+  const cached = getCached(path);
+  if (cached !== null) {
+    // Serve stale instantly, refresh silently in background
+    GET(path).then(fresh => {
+      const freshStr = JSON.stringify(fresh);
+      if (freshStr !== JSON.stringify(cached)) {
+        setCached(path, fresh);
+        if (onUpdate) onUpdate(fresh);
+      }
+    }).catch(() => {});
+    return cached;
+  }
+  // Cold cache — must await
+  const data = await GET(path);
+  setCached(path, data);
+  return data;
+}
+
+// ─── CACHE INVALIDATION HELPERS ─────────────────────────────
+export const bust = (...prefixes) => invalidate(...prefixes);
+
+// Bust everything related to transactions & derived stats
+export const bustTx  = () => bust('/api/transactions', '/api/stats', '/api/budget-limits', '/api/accounts');
+export const bustAcc = () => bust('/api/accounts');
+export const bustSub = () => bust('/api/subscriptions', '/api/accounts');
 
 // ─── DATA LOADERS ───────────────────────────────────────────
 export async function loadAll() {
@@ -31,10 +62,10 @@ export async function loadAll() {
     GET('/api/subscriptions'),
     GET('/api/planned-income'),
   ]);
-  S.accounts      = accsData.accounts      || [];
+  S.accounts      = accsData.accounts       || [];
   S.usdRate       = parseFloat(accsData.usd_rate || 90);
-  S.categories    = catsData.categories    || [];
-  S.subscriptions = subsData.subscriptions || [];
+  S.categories    = catsData.categories     || [];
+  S.subscriptions = subsData.subscriptions  || [];
   S.planned       = planData.planned_income || [];
   document.getElementById('cfg-usd').value = S.usdRate;
 }
@@ -43,9 +74,11 @@ export async function reloadAccounts() {
   const data = await GET('/api/accounts');
   S.accounts = data.accounts || [];
   S.usdRate  = parseFloat(data.usd_rate || 90);
+  bustAcc();
 }
 
 export async function reloadSubscriptions() {
   const data = await GET('/api/subscriptions');
   S.subscriptions = data.subscriptions || [];
+  bustSub();
 }

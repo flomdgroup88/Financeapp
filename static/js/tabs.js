@@ -1,5 +1,5 @@
 import { S, fmt, fmtRub, toRub, fmtDate, daysUntil, activeBalance, totalBalance, hasReserve } from './state.js';
-import { GET, haptic } from './api.js';
+import { GET, GETC, haptic } from './api.js';
 import { MONTHS } from './config.js';
 import { initBarChart, initDonutChart, initDonutChartClickable } from './charts.js';
 import { renderTxList, renderCatRow, renderCatRowClickable, renderAccCard, renderCmpRow, renderSubCard } from './components.js';
@@ -12,13 +12,29 @@ export function setModalOpeners(m) {
      openTransferModal, openChartDetail, openBudgetsModal } = m);
 }
 
+
+// ─── SKELETON HELPERS ────────────────────────────────────────
+const sk = (h = 18, w = '100%', r = 8) =>
+  `<div class="sk" style="height:${h}px;width:${w};border-radius:${r}px"></div>`;
+const skCard = (rows = 2) => `<div class="card" style="display:flex;flex-direction:column;gap:10px;padding:16px">
+  ${sk(26, '55%', 6)}${Array(rows - 1).fill(sk(14, '80%')).join('')}</div>`;
+const skSection = (n = 3) => Array(n).fill(skCard()).join('');
+
 // ─── DASHBOARD ──────────────────────────────────────────────
 export async function renderDashboard() {
   const el = document.getElementById('dash-content');
+
+  // Show skeleton if no cached data yet
+  const dashKey  = `/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`;
+  const cmpKey   = '/api/stats/comparison';
+
+  if (!el._hasData) el.innerHTML = `${skCard(3)}${skSection(4)}`;
+
   const [monthly, comparison] = await Promise.all([
-    GET(`/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`),
-    GET('/api/stats/comparison'),
+    GETC(dashKey,  () => renderDashboard()),
+    GETC(cmpKey,   () => renderDashboard()),
   ]);
+  el._hasData = true;
   const active = activeBalance(), total = totalBalance(), reserve = hasReserve();
   const exp = monthly.total_expenses || 0, inc = monthly.total_income || 0, net = inc - exp;
   const subMonthly = S.subscriptions.filter(s => s.is_active).reduce((s, x) =>
@@ -259,11 +275,23 @@ export async function renderExpenses() {
   const el = document.getElementById('exp-content');
   const m2 = String(S.expMonth).padStart(2, '0');
   const startDate = `${S.expYear}-${m2}-01`, endDate = `${S.expYear}-${m2}-31`;
+
+  const mKey  = `/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`;
+  const txKey = `/api/transactions?type=expense&start_date=${startDate}&end_date=${endDate}`;
+  const blKey = `/api/budget-limits?year=${S.expYear}&month=${S.expMonth}`;
+
+  if (!el._hasData) el.innerHTML = `<div class="month-nav" style="margin-bottom:12px">
+    <button id="exp-prev">‹</button>
+    <div class="month-label">${MONTHS[S.expMonth]} ${S.expYear}</div>
+    <button id="exp-next">›</button>
+  </div>${skCard(2)}${skSection(3)}`;
+
   const [monthly, txData, budgetData] = await Promise.all([
-    GET(`/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`),
-    GET(`/api/transactions?type=expense&start_date=${startDate}&end_date=${endDate}`),
-    GET(`/api/budget-limits?year=${S.expYear}&month=${S.expMonth}`),
+    GETC(mKey,  () => renderExpenses()),
+    GETC(txKey, () => renderExpenses()),
+    GETC(blKey, () => renderExpenses()),
   ]);
+  el._hasData = true;
   const cats  = monthly.by_category || [];
   const total = monthly.total_expenses || 0;
   const txs   = txData.transactions || [];
@@ -344,8 +372,18 @@ export async function renderExpenses() {
       cats.map(c => c.color || '#6366f1'), cats.map(c => c.id), startDate, endDate,
       (cat, label, color) => openChartDetail(cat.id, label, cat.icon, color, startDate, endDate));
 
-  document.getElementById('exp-prev').onclick = () => { haptic(); if (S.expMonth === 1) { S.expMonth = 12; S.expYear--; } else S.expMonth--; renderExpenses(); };
-  document.getElementById('exp-next').onclick = () => { haptic(); if (S.expMonth === 12) { S.expMonth = 1; S.expYear++; } else S.expMonth++; renderExpenses(); };
+  document.getElementById('exp-prev').onclick = () => {
+    haptic();
+    if (S.expMonth === 1) { S.expMonth = 12; S.expYear--; } else S.expMonth--;
+    document.getElementById('exp-content')._hasData = false;
+    renderExpenses();
+  };
+  document.getElementById('exp-next').onclick = () => {
+    haptic();
+    if (S.expMonth === 12) { S.expMonth = 1; S.expYear++; } else S.expMonth++;
+    document.getElementById('exp-content')._hasData = false;
+    renderExpenses();
+  };
   document.getElementById('btn-add-income-exp').onclick = () => openIncomeModal();
   document.getElementById('btn-add-cat').onclick = () => openCatModal();
   const budgetBtn = document.getElementById('btn-manage-budgets');

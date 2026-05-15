@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { loadAll, GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions } from './api.js';
+import { loadAll, GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, bustTx } from './api.js';
 import { handlePickerClick } from './pickers.js';
 import {
   renderDashboard, renderBalance, renderExpenses,
@@ -38,6 +38,9 @@ async function renderTab(tab) {
     t.classList.toggle('active', t.dataset.tab === tab));
   document.querySelectorAll('.tab').forEach(p =>
     p.classList.toggle('active', p.id === `tab-${tab}`));
+  // Scroll tab content to top on every switch
+  const activeTab = document.getElementById(`tab-${tab}`);
+  if (activeTab) activeTab.parentElement.scrollTop = 0;
 
   switch (tab) {
     case 'dashboard':     await renderDashboard();     break;

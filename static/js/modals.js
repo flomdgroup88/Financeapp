@@ -1,5 +1,5 @@
 import { S, fmtRub, toRub, today, withLoading } from './state.js';
-import { GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, loadAll } from './api.js';
+import { GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, loadAll, bustTx, bustAcc, bustSub } from './api.js';
 import { ICONS_ACC, ICONS_SUB, ICONS_CAT, MONTHS } from './config.js';
 import { renderIconPicker, renderColorPicker } from './pickers.js';
 import { renderTxList } from './components.js';
@@ -94,6 +94,7 @@ export async function saveExpense() {
   closeModal('ov-expense');
   window.__renderCurrentTab();
   await POST('/api/transactions', body);
+  bustTx();
   reloadAccounts();
 }
 
@@ -155,6 +156,7 @@ export async function saveEditTx() {
     const res = await PUT(`/api/transactions/${S.editTxId}`, body);
     if (res.ok) {
       closeModal('ov-edit-tx');
+      bustTx();
       await reloadAccounts();
       window.__renderCurrentTab();
       showToast('✅ Транзакция обновлена');
@@ -191,6 +193,7 @@ export async function saveIncome() {
   closeModal('ov-income');
   window.__renderCurrentTab();
   await POST('/api/transactions', body);
+  bustTx();
   reloadAccounts();
 }
 
@@ -245,6 +248,7 @@ export async function saveTransfer() {
     });
     if (res.ok) {
       closeModal('ov-transfer');
+      bustTx();
       await reloadAccounts();
       window.__renderCurrentTab();
     }
@@ -292,6 +296,7 @@ export async function saveAccount() {
     if (S.editAccId) await PUT(`/api/accounts/${S.editAccId}`, body);
     else             await POST('/api/accounts', body);
     closeModal('ov-account');
+    bustAcc();
     await loadAll();
     window.__renderCurrentTab();
   });
@@ -301,6 +306,7 @@ export async function deleteAccount() {
   if (!S.editAccId || !confirm('Удалить счёт? Транзакции сохранятся.')) return;
   await DEL(`/api/accounts/${S.editAccId}`);
   closeModal('ov-account');
+  bustAcc();
   await loadAll();
   window.__renderCurrentTab();
 }
@@ -390,6 +396,8 @@ export async function chargeSub(id, btn) {
       const acc = S.accounts.find(a => a.id === res.account_id);
       if (acc && sub) acc.balance -= sub.amount;
       haptic('success');
+      bustSub();
+      bustTx();
       window.__renderTab('subscriptions');
       reloadAccounts();
     }
@@ -505,6 +513,7 @@ export async function deletePlanned(id) {
 export async function deleteTx(id) {
   haptic();
   await DEL(`/api/transactions/${id}`);
+  bustTx();
   await reloadAccounts();
   window.__renderCurrentTab();
 }
@@ -571,6 +580,7 @@ export async function saveBudgets() {
   });
   await withLoading('btn-save-budgets', async () => {
     await Promise.all(saves);
+    bustTx();   // budget-limits share the bustTx prefix /api/budget-limits
     closeModal('ov-budgets');
     await window.__renderCurrentTab();
     showToast('✅ Лимиты сохранены');
