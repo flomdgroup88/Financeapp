@@ -6,6 +6,7 @@ export const S = {
   expYear:  new Date().getFullYear(),
   expMonth: new Date().getMonth() + 1,
   histStart: '', histEnd: '', histSearch: '', histOffset: 0, histTxs: [],
+  histSortBy: 'date', histSortDir: 'desc',
   selCatId: null,
   editAccId: null, editSubId: null, editCatId: null, editTxId: null, editTxFromId: null,
   editGoalId: null, editRecurId: null, recurCatId: null,

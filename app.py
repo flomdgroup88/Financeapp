@@ -633,6 +633,15 @@ def transactions():
         where  = "WHERE " + " AND ".join(clauses)
         limit  = int(request.args.get("limit", 50))
         offset = int(request.args.get("offset", 0))
+
+        # Сортировка — белый список полей, чтобы исключить SQL-инъекцию
+        SORT_COLS = {"date": "t.date", "amount": "t.amount", "type": "t.type"}
+        sort_by  = SORT_COLS.get(request.args.get("sort_by", "date"), "t.date")
+        sort_dir = "ASC" if request.args.get("sort_dir", "desc").lower() == "asc" else "DESC"
+        # Вторичный ключ: при сортировке по дате — id убывает (новые сверху при равной дате)
+        secondary = "t.id DESC" if sort_by == "t.date" else "t.date DESC, t.id DESC"
+        order_clause = f"{sort_by} {sort_dir}, {secondary}"
+
         rows   = qall(
             f"""SELECT t.*,
                    c.name  AS category_name,
@@ -643,7 +652,7 @@ def transactions():
                LEFT JOIN categories c ON c.id=t.category_id
                LEFT JOIN accounts   a ON a.id=t.account_id
                {where}
-               ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?""",
+               ORDER BY {order_clause} LIMIT ? OFFSET ?""",
             params + [limit, offset])
 
         # Aggregate stats over the full period (no limit/offset, no search filter)

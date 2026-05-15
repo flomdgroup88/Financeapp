@@ -551,9 +551,20 @@ export function renderHistory() {
       ${[['Этот месяц', 0], ['Прошлый', 1], ['3 мес', 3], ['Год', 12]].map(([l, b]) =>
         `<button class="btn btn-secondary btn-sm" data-action="hist-preset" data-months="${b}">${l}</button>`).join('')}
     </div>
-    <div style="position:relative;margin-bottom:12px">
+    <div style="position:relative;margin-bottom:8px">
       <input type="search" id="hist-search" class="finput" placeholder="🔍 Поиск по описанию..." value="${S.histSearch || ''}"
         style="padding-left:12px">
+    </div>
+    <div id="hist-sort-bar" style="display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--hint);font-weight:600;text-transform:uppercase;letter-spacing:.4px;flex-shrink:0">Сортировка:</span>
+      ${[['date','📅 Дата'],['amount','💰 Сумма'],['type','🔀 Тип']].map(([key, label]) => `
+        <button class="btn btn-secondary btn-sm hist-sort-btn ${S.histSortBy === key ? 'active' : ''}"
+          data-sort="${key}" style="display:flex;align-items:center;gap:3px">
+          ${label}
+          <span class="sort-arrow" style="display:${S.histSortBy === key ? 'inline' : 'none'}">
+            ${S.histSortDir === 'asc' ? '↑' : '↓'}
+          </span>
+        </button>`).join('')}
     </div>
     <div id="hist-result">
       <div style="text-align:center;color:var(--hint);padding:24px;font-size:13px">Выберите период и нажмите OK</div>
@@ -562,11 +573,35 @@ export function renderHistory() {
   document.getElementById('hist-start').onchange = e => { S.histStart = e.target.value; };
   document.getElementById('hist-end').onchange   = e => { S.histEnd   = e.target.value; };
   document.getElementById('btn-hist-load').onclick = () => { S.histOffset = 0; loadHistoryData(); };
+
   let searchTimer;
   document.getElementById('hist-search').addEventListener('input', e => {
     S.histSearch = e.target.value;
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => { S.histOffset = 0; loadHistoryData(); }, 350);
+  });
+
+  // Sort buttons — клик по активной кнопке меняет направление, по другой — меняет поле
+  document.querySelectorAll('.hist-sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      haptic('light');
+      const key = btn.dataset.sort;
+      if (S.histSortBy === key) {
+        S.histSortDir = S.histSortDir === 'desc' ? 'asc' : 'desc';
+      } else {
+        S.histSortBy  = key;
+        S.histSortDir = key === 'amount' ? 'desc' : 'desc'; // по умолчанию — убывание
+      }
+      // Обновляем внешний вид кнопок без перерисовки всей страницы
+      document.querySelectorAll('.hist-sort-btn').forEach(b => {
+        const isActive = b.dataset.sort === S.histSortBy;
+        b.classList.toggle('active', isActive);
+        b.querySelector('.sort-arrow').style.display = isActive ? 'inline' : 'none';
+        if (isActive) b.querySelector('.sort-arrow').textContent = S.histSortDir === 'asc' ? '↑' : '↓';
+      });
+      S.histOffset = 0;
+      loadHistoryData();
+    });
   });
 }
 
@@ -595,7 +630,7 @@ export async function loadHistoryData() {
     res.innerHTML = '<div style="text-align:center;color:var(--hint);padding:24px">Загрузка...</div>';
   }
 
-  let url = `/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=${LIMIT}&offset=${S.histOffset}`;
+  let url = `/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=${LIMIT}&offset=${S.histOffset}&sort_by=${S.histSortBy}&sort_dir=${S.histSortDir}`;
   if (S.histSearch && S.histSearch.trim()) url += `&search=${encodeURIComponent(S.histSearch.trim())}`;
 
   const data   = await GET(url);
