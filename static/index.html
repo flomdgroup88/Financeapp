@@ -248,6 +248,105 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 .tab.active .card,.tab.active .acc-card,.tab.active .cat-row,.tab.active .tx-row,.tab.active .sub-card{animation:fadeUp .2s ease both}
+
+/* ─── PERFORMANCE & SMOOTHNESS ──────────────────────────────  */
+
+/* GPU layers for frequently animated elements */
+.modal, .overlay, .fab-btn, .tab-item .nb-ico {
+  will-change: transform;
+}
+.card, .acc-card, .sub-card {
+  will-change: opacity;
+  contain: content;          /* skip layout of children when card repaints */
+}
+
+/* Faster modal open feel — spring-like cubic */
+.modal {
+  transition: transform .22s cubic-bezier(.34,1.3,.64,1);
+}
+
+/* Tab fade-in with upward drift */
+@keyframes tabIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tab.active > div {
+  animation: tabIn .18s ease-out both;
+}
+
+/* Staggered card entrance — each card slightly later */
+.tab.active .card:nth-child(1)  { animation-delay: .00s }
+.tab.active .card:nth-child(2)  { animation-delay: .04s }
+.tab.active .card:nth-child(3)  { animation-delay: .07s }
+.tab.active .card:nth-child(4)  { animation-delay: .10s }
+.tab.active .card:nth-child(5)  { animation-delay: .12s }
+.tab.active .acc-card:nth-child(1) { animation-delay: .03s }
+.tab.active .acc-card:nth-child(2) { animation-delay: .07s }
+.tab.active .acc-card:nth-child(3) { animation-delay: .11s }
+.tab.active .acc-card:nth-child(4) { animation-delay: .14s }
+.tab.active .sub-card:nth-child(1) { animation-delay: .02s }
+.tab.active .sub-card:nth-child(2) { animation-delay: .05s }
+.tab.active .sub-card:nth-child(3) { animation-delay: .08s }
+.tab.active .sub-card:nth-child(4) { animation-delay: .11s }
+
+/* Smooth active state for all interactive elements */
+.acc-card, .cat-row, .tx-row, .sub-card, .cg-item, .btn, .hdr-btn, .tab-item, .sort-btn {
+  transition: opacity .12s, transform .12s, background .15s, border-color .15s;
+}
+.acc-card:active, .cat-row:active, .sub-card:active {
+  transform: scale(.985);
+  opacity: .85;
+}
+.btn:active   { transform: scale(.96); }
+.fab-btn:active { transform: scale(.88) !important; }
+
+/* Nav tab press bounce */
+.tab-item:active .nb-ico { transform: scale(.88); }
+
+/* Smooth balance number transitions */
+.card-value, .card-value.lg {
+  transition: color .3s;
+  font-variant-numeric: tabular-nums;   /* fixed-width digits — no jitter when counting */
+}
+
+/* Number font — monospaced digits prevent layout shift */
+.tx-amt, .sub-amt, .acc-bal .v, .cat-amt {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pull-to-refresh feel — subtle bounce at top */
+#main {
+  overscroll-behavior-y: contain;
+}
+
+/* Smooth toggle */
+.toggle {
+  transition: background .2s cubic-bezier(.4,0,.2,1);
+}
+.toggle::after {
+  transition: transform .2s cubic-bezier(.34,1.4,.64,1);   /* spring overshoot */
+}
+
+/* Chip color transitions */
+.chip { transition: background .2s, color .2s; }
+
+/* Overlay backdrop blur for depth */
+.overlay {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: opacity .18s ease;
+}
+
+/* Remove stutter from original fadeUp rule — let tabIn handle it */
+.tab.active .card,
+.tab.active .acc-card,
+.tab.active .cat-row,
+.tab.active .tx-row,
+.tab.active .sub-card { animation: none; }
+
+/* App-level smooth rendering */
+#app { -webkit-font-smoothing: antialiased; }
+
 </style>
 </head>
 <body>

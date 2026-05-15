@@ -92,7 +92,7 @@ export async function saveExpense() {
   const acc = S.accounts.find(a => a.id === accId);
   if (acc) acc.balance -= amt;
   closeModal('ov-expense');
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   await POST('/api/transactions', body);
   bustTx();
   reloadAccounts();
@@ -158,7 +158,7 @@ export async function saveEditTx() {
       closeModal('ov-edit-tx');
       bustTx();
       await reloadAccounts();
-      window.__renderCurrentTab();
+      window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
       showToast('✅ Транзакция обновлена');
     }
   });
@@ -191,7 +191,7 @@ export async function saveIncome() {
   const acc = S.accounts.find(a => a.id === accId);
   if (acc) acc.balance += amt;
   closeModal('ov-income');
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   await POST('/api/transactions', body);
   bustTx();
   reloadAccounts();
@@ -250,7 +250,7 @@ export async function saveTransfer() {
       closeModal('ov-transfer');
       bustTx();
       await reloadAccounts();
-      window.__renderCurrentTab();
+      window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
     }
   });
 }
@@ -298,7 +298,7 @@ export async function saveAccount() {
     closeModal('ov-account');
     bustAcc();
     await loadAll();
-    window.__renderCurrentTab();
+    window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   });
 }
 
@@ -308,7 +308,7 @@ export async function deleteAccount() {
   closeModal('ov-account');
   bustAcc();
   await loadAll();
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 // ─── SUBSCRIPTION MODAL ──────────────────────────────────────
@@ -372,7 +372,7 @@ export async function saveSub() {
     else             await POST('/api/subscriptions', body);
     closeModal('ov-sub');
     await reloadSubscriptions();
-    window.__renderTab('subscriptions');
+    invalidateTab && invalidateTab('subscriptions'); window.__renderTab('subscriptions', true);
   });
 }
 
@@ -381,7 +381,7 @@ export async function deleteSub() {
   await DEL(`/api/subscriptions/${S.editSubId}`);
   closeModal('ov-sub');
   await reloadSubscriptions();
-  window.__renderTab('subscriptions');
+  invalidateTab && invalidateTab('subscriptions'); window.__renderTab('subscriptions', true);
 }
 
 export async function chargeSub(id, btn) {
@@ -398,7 +398,7 @@ export async function chargeSub(id, btn) {
       haptic('success');
       bustSub();
       bustTx();
-      window.__renderTab('subscriptions');
+      invalidateTab && invalidateTab('subscriptions'); window.__renderTab('subscriptions', true);
       reloadAccounts();
     }
   } finally { btn.disabled = false; btn.textContent = orig; }
@@ -407,7 +407,7 @@ export async function chargeSub(id, btn) {
 export async function toggleSub(id) {
   await PUT(`/api/subscriptions/${id}/toggle`);
   await reloadSubscriptions();
-  window.__renderTab('subscriptions');
+  invalidateTab && invalidateTab('subscriptions'); window.__renderTab('subscriptions', true);
 }
 
 // ─── CATEGORY MODAL ──────────────────────────────────────────
@@ -436,7 +436,7 @@ export async function saveCat() {
     closeModal('ov-cat');
     const data = await GET('/api/categories');
     S.categories = data.categories || [];
-    window.__renderCurrentTab();
+    window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   });
 }
 
@@ -446,7 +446,7 @@ export async function deleteCat() {
   closeModal('ov-cat');
   const data = await GET('/api/categories');
   S.categories = data.categories || [];
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 // ─── CHART DRILLDOWN ────────────────────────────────────────
@@ -489,7 +489,7 @@ export async function savePlanned() {
     closeModal('ov-planned');
     const data = await GET('/api/planned-income');
     S.planned  = data.planned_income || [];
-    window.__renderCurrentTab();
+    window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   });
 }
 
@@ -499,14 +499,14 @@ export async function receivePlanned(id) {
   if (!accId) return alert('Добавьте счёт');
   await PUT(`/api/planned-income/${id}/receive?account_id=${accId}`);
   await loadAll();
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 export async function deletePlanned(id) {
   await DEL(`/api/planned-income/${id}`);
   const data = await GET('/api/planned-income');
   S.planned  = data.planned_income || [];
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 // ─── DELETE TRANSACTION ──────────────────────────────────────
@@ -515,7 +515,7 @@ export async function deleteTx(id) {
   await DEL(`/api/transactions/${id}`);
   bustTx();
   await reloadAccounts();
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 // ─── SETTINGS ────────────────────────────────────────────────
@@ -524,7 +524,7 @@ export async function saveSettings() {
   await POST('/api/settings', { usd_rate: rate });
   S.usdRate = rate;
   closeModal('ov-settings');
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 // ─── BUDGET LIMITS MODAL ─────────────────────────────────────
@@ -582,7 +582,7 @@ export async function saveBudgets() {
     await Promise.all(saves);
     bustTx();   // budget-limits share the bustTx prefix /api/budget-limits
     closeModal('ov-budgets');
-    await window.__renderCurrentTab();
+    await window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
     showToast('✅ Лимиты сохранены');
   });
 }
@@ -592,5 +592,5 @@ export async function moveAccount(id, direction) {
   haptic();
   await PUT(`/api/accounts/${id}/move`, { direction });
   await reloadAccounts();
-  window.__renderCurrentTab();
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }

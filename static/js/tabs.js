@@ -161,6 +161,13 @@ export async function renderDashboard() {
   `;
 
   if (days.length > 0) initBarChart('chart-daily', days.map(d => d.date.slice(8)), days.map(d => d.total));
+
+  // Animate the main balance number
+  const balEl = el.querySelector('.card-value.lg');
+  if (balEl && window.__animateCount) {
+    const target = reserve ? active : total;
+    window.__animateCount(balEl, 0, target);
+  }
 }
 
 function buildInsights(cmp, exp, inc, subMonthly, subs) {
