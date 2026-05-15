@@ -24,6 +24,7 @@ import {
   moveAccount,
   openGoalModal, saveGoal, deleteGoal, openGoalDepositModal, saveGoalDeposit,
   openRecurModal, onRecurPeriodChange, handleSelRecurCat, saveRecur, deleteRecur, applyRecur, toggleRecur,
+  openYearlyStats,
 } from './modals.js';
 
 // ─── WIRE MODAL OPENERS INTO TABS MODULE ────────────────────
@@ -37,6 +38,7 @@ window.__modals         = {
   openModal, closeModal,
   openGoalModal, openGoalDepositModal,
   openRecurModal, applyRecur, toggleRecur,
+  openYearlyStats,
 };
 window.__pickers        = { renderIconPicker, renderColorPicker };
 window.__ICONS_GOAL     = ICONS_GOAL;

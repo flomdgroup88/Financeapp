@@ -1,4 +1,4 @@
-import { S, fmtRub, toRub, today, withLoading } from './state.js';
+import { S, fmtRub, toRub, today, withLoading, fmtDate } from './state.js';
 import { GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, loadAll, bustTx, bustAcc, bustSub } from './api.js';
 import { ICONS_ACC, ICONS_SUB, ICONS_CAT, ICONS_GOAL, ICONS_RECUR, MONTHS } from './config.js';
 import { renderIconPicker, renderColorPicker } from './pickers.js';
@@ -51,6 +51,40 @@ export function initModalDismiss() {
     btn.addEventListener('click', () => closeModal(btn.dataset.close || btn.closest('.overlay').id)));
   document.querySelectorAll('.overlay').forEach(ov =>
     ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); }));
+
+  // ── Keyboard / textarea comfort fix ──────────────────────────
+  // When textarea inside a modal gets focus, wait for iOS keyboard (~350ms)
+  // then scroll it into view inside the modal-body.
+  document.addEventListener('focusin', e => {
+    const field = e.target;
+    if (!field.matches('textarea, input')) return;
+    const modalBody = field.closest('.modal-body');
+    if (!modalBody) return;
+    setTimeout(() => {
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 380);
+  });
+
+  // visualViewport fires when keyboard opens/closes on mobile.
+  // Shrink the modal so it fits above the keyboard.
+  if (window.visualViewport) {
+    const onVpResize = () => {
+      const vvh = window.visualViewport.height;
+      const wh  = window.innerHeight;
+      const keyboardH = Math.max(0, wh - vvh);
+      document.querySelectorAll('.overlay.show .modal').forEach(modal => {
+        modal.style.maxHeight = keyboardH > 80 ? `${vvh * 0.97}px` : '';
+      });
+      if (keyboardH > 80) {
+        const focused = document.activeElement;
+        if (focused && focused.closest('.modal-body')) {
+          setTimeout(() => focused.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+        }
+      }
+    };
+    window.visualViewport.addEventListener('resize', onVpResize);
+    window.visualViewport.addEventListener('scroll', onVpResize);
+  }
 }
 
 // ─── EXPENSE MODAL ───────────────────────────────────────────
@@ -872,3 +906,144 @@ export async function toggleRecur(id) {
   S.recurring = data.recurring || [];
   window.__renderTab('subscriptions', true);
 }
+
+// ─── YEARLY STATS MODAL ──────────────────────────────────────
+const MONTH_SHORT = ['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+
+export async function openYearlyStats(year) {
+  year = year || new Date().getFullYear();
+  const modal = document.getElementById('ov-yearly-stats');
+  const body  = modal.querySelector('.modal-body');
+
+  // Show year selector + loading state
+  body.innerHTML = renderYearlyShell(year);
+  openModal('ov-yearly-stats');
+
+  const data = await GET(`/api/stats/yearly?year=${year}`);
+  renderYearlyContent(body, data, year);
+}
+
+function renderYearlyShell(year) {
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button onclick="window.__yearlyNav(${year - 1})" style="background:var(--card);border:1px solid var(--card-b);border-radius:8px;color:var(--text);width:36px;height:36px;font-size:18px;cursor:pointer">‹</button>
+      <span style="font-size:18px;font-weight:700">${year}</span>
+      <button onclick="window.__yearlyNav(${year + 1})" style="background:var(--card);border:1px solid var(--card-b);border-radius:8px;color:var(--text);width:36px;height:36px;font-size:18px;cursor:pointer">›</button>
+    </div>
+    <div style="text-align:center;padding:40px;color:var(--hint);font-size:14px">Загрузка...</div>`;
+}
+
+function renderYearlyContent(body, d, year) {
+  const net = d.total_income - d.total_expenses;
+  const netColor = net >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // Build SVG bar chart (income vs expenses per month)
+  const maxVal = Math.max(...d.monthly.map(m => Math.max(m.income, m.expenses)), 1);
+  const chartH = 100, barW = 12, gap = 4, chartW = 12 * (barW * 2 + gap + 4);
+
+  const bars = d.monthly.map((m, i) => {
+    const expH = Math.round((m.expenses / maxVal) * chartH);
+    const incH = Math.round((m.income  / maxVal) * chartH);
+    const x    = i * (barW * 2 + gap + 4);
+    return `
+      <rect x="${x}" y="${chartH - incH}" width="${barW}" height="${incH}" rx="3" fill="var(--green)" opacity=".75"/>
+      <rect x="${x + barW + 2}" y="${chartH - expH}" width="${barW}" height="${expH}" rx="3" fill="var(--red)" opacity=".75"/>
+      <text x="${x + barW}" y="${chartH + 12}" text-anchor="middle" font-size="7" fill="var(--hint)">${MONTH_SHORT[i]}</text>
+    `;
+  }).join('');
+
+  // Category rows
+  const totalExp = d.total_expenses || 1;
+  const catRows = (d.by_category || []).slice(0, 8).map(c => {
+    const pct = Math.round((c.total / totalExp) * 100);
+    const barPct = Math.min(100, pct);
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--divider)">
+        <span style="font-size:20px;flex-shrink:0">${c.icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:500;margin-bottom:4px">
+            <span>${c.name}</span><span style="color:var(--hint)">${pct}%</span>
+          </div>
+          <div style="height:4px;background:var(--card-b);border-radius:2px">
+            <div style="height:4px;width:${barPct}%;background:${c.color || 'var(--accent)'};border-radius:2px"></div>
+          </div>
+        </div>
+        <span style="font-size:13px;font-weight:700;flex-shrink:0;min-width:72px;text-align:right">${fmtRub(c.total)}</span>
+      </div>`;
+  }).join('');
+
+  const bestMonthName  = d.best_month  ? MONTH_SHORT[d.best_month.month - 1]  : '—';
+  const worstMonthName = d.worst_month ? MONTH_SHORT[d.worst_month.month - 1] : '—';
+
+  body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <button onclick="window.__yearlyNav(${year - 1})" style="background:var(--card);border:1px solid var(--card-b);border-radius:8px;color:var(--text);width:36px;height:36px;font-size:18px;cursor:pointer">‹</button>
+      <span style="font-size:18px;font-weight:700">${year}</span>
+      <button onclick="window.__yearlyNav(${year + 1})" style="background:var(--card);border:1px solid var(--card-b);border-radius:8px;color:var(--text);width:36px;height:36px;font-size:18px;cursor:pointer">›</button>
+    </div>
+
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div class="card" style="padding:12px">
+        <div class="card-title" style="font-size:10px">Расходы за год</div>
+        <div style="font-size:18px;font-weight:700;color:var(--red)">${fmtRub(d.total_expenses)}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="card-title" style="font-size:10px">Доходы за год</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green)">${fmtRub(d.total_income)}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="card-title" style="font-size:10px">Баланс года</div>
+        <div style="font-size:18px;font-weight:700;color:${netColor}">${net >= 0 ? '+' : ''}${fmtRub(net)}</div>
+      </div>
+      <div class="card" style="padding:12px">
+        <div class="card-title" style="font-size:10px">Средние траты/мес</div>
+        <div style="font-size:18px;font-weight:700">${fmtRub(d.avg_monthly_expense)}</div>
+        <div style="font-size:10px;color:var(--hint);margin-top:2px">${d.active_months} мес. с данными</div>
+      </div>
+    </div>
+
+    <!-- Mini highlights -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <div class="card" style="padding:10px;border-color:rgba(16,185,129,.3)">
+        <div style="font-size:10px;color:var(--hint);margin-bottom:2px">💚 Лучший месяц</div>
+        <div style="font-size:14px;font-weight:700">${bestMonthName}</div>
+        ${d.best_month ? `<div style="font-size:11px;color:var(--green)">+${fmtRub(d.best_month.income - d.best_month.expenses)}</div>` : ''}
+      </div>
+      <div class="card" style="padding:10px;border-color:rgba(239,68,68,.3)">
+        <div style="font-size:10px;color:var(--hint);margin-bottom:2px">🔥 Самый дорогой</div>
+        <div style="font-size:14px;font-weight:700">${worstMonthName}</div>
+        ${d.worst_month ? `<div style="font-size:11px;color:var(--red)">${fmtRub(d.worst_month.expenses)}</div>` : ''}
+      </div>
+    </div>
+
+    <!-- Monthly bar chart -->
+    <div class="sec-hdr" style="margin-bottom:8px">
+      <span class="sec-title">Доходы vs Расходы по месяцам</span>
+    </div>
+    <div class="card" style="padding:12px;margin-bottom:16px">
+      <div style="display:flex;gap:12px;margin-bottom:8px;font-size:11px;color:var(--hint)">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--green);border-radius:2px;opacity:.75;margin-right:4px"></span>Доходы</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--red);border-radius:2px;opacity:.75;margin-right:4px"></span>Расходы</span>
+      </div>
+      <svg viewBox="0 0 ${chartW} ${chartH + 16}" width="100%" xmlns="http://www.w3.org/2000/svg">${bars}</svg>
+    </div>
+
+    <!-- Category breakdown -->
+    ${catRows ? `
+    <div class="sec-hdr" style="margin-bottom:4px"><span class="sec-title">Топ категорий</span></div>
+    <div class="card" style="padding:0 12px">
+      ${catRows}
+    </div>
+    <div style="text-align:center;padding:12px 0;font-size:12px;color:var(--hint)">${d.tx_count} транзакций за год</div>` : 
+    '<div class="empty"><div class="empty-ico">📊</div><div class="empty-text">Нет данных за этот год</div></div>'}
+  `;
+}
+
+window.__yearlyNav = async (year) => {
+  const modal = document.getElementById('ov-yearly-stats');
+  const body  = modal.querySelector('.modal-body');
+  body.innerHTML = renderYearlyShell(year);
+  const data = await GET(`/api/stats/yearly?year=${year}`);
+  renderYearlyContent(body, data, year);
+};

@@ -158,6 +158,13 @@ export async function renderDashboard() {
           <span class="sub-days soon">через ${daysUntil(s.next_date)} д.</span>
         </div>
       </div>`).join('')}` : ''}
+
+    <div style="padding:4px 0 16px">
+      <button onclick="window.__modals.openYearlyStats(${new Date().getFullYear()})"
+        style="width:100%;padding:13px;border-radius:12px;background:var(--card);border:1px solid var(--card-b);color:var(--text);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+        📊 Годовая статистика
+      </button>
+    </div>
   `;
 
   if (days.length > 0) initBarChart('chart-daily', days.map(d => d.date.slice(8)), days.map(d => d.total));

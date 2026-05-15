@@ -1094,6 +1094,72 @@ def stats_comparison():
 
 
 # ──────────────────────────────────────────────
+# Stats — yearly
+# ──────────────────────────────────────────────
+@app.route("/api/stats/yearly")
+def stats_yearly():
+    year = int(request.args.get("year", date.today().year))
+    start = f"{year}-01-01"
+    end   = f"{year}-12-31"
+
+    # Total income and expenses for the year
+    total_exp = qone(
+        "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='expense' AND date>=? AND date<=?",
+        (uid(), start, end))["v"]
+    total_inc = qone(
+        "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='income' AND date>=? AND date<=?",
+        (uid(), start, end))["v"]
+
+    # Monthly breakdown (income + expenses per month)
+    monthly = []
+    for m in range(1, 13):
+        ms = f"{year}-{m:02d}-01"
+        me = f"{year}-{m:02d}-31"
+        exp_m = qone(
+            "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='expense' AND date>=? AND date<=?",
+            (uid(), ms, me))["v"]
+        inc_m = qone(
+            "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='income' AND date>=? AND date<=?",
+            (uid(), ms, me))["v"]
+        monthly.append({"month": m, "expenses": exp_m, "income": inc_m})
+
+    # Top categories for the year
+    by_cat = qall(
+        """SELECT c.id, c.name, c.icon, c.color, COALESCE(SUM(t.amount),0) AS total
+           FROM categories c
+           JOIN transactions t ON t.category_id=c.id
+           WHERE t.user_id=? AND t.type='expense' AND t.date>=? AND t.date<=?
+           GROUP BY c.id ORDER BY total DESC LIMIT 10""",
+        (uid(), start, end))
+
+    # Count of transactions
+    tx_count = qone(
+        "SELECT COUNT(*) AS v FROM transactions WHERE user_id=? AND date>=? AND date<=?",
+        (uid(), start, end))["v"]
+
+    # Best saving month (highest income - expense)
+    best_month = max(monthly, key=lambda x: x["income"] - x["expenses"], default=None)
+    worst_month = max(monthly, key=lambda x: x["expenses"], default=None)
+
+    # Average monthly spending (only months with data)
+    active_months = [m for m in monthly if m["expenses"] > 0]
+    avg_monthly = (total_exp / len(active_months)) if active_months else 0
+
+    return jsonify({
+        "year": year,
+        "total_expenses": total_exp,
+        "total_income": total_inc,
+        "monthly": monthly,
+        "by_category": by_cat,
+        "tx_count": tx_count,
+        "best_month": best_month,
+        "worst_month": worst_month,
+        "avg_monthly_expense": avg_monthly,
+        "active_months": len(active_months),
+    })
+
+
+# ──────────────────────────────────────────────
 # Savings Goals
 # ──────────────────────────────────────────────
 @app.route("/api/goals", methods=["GET", "POST"])
