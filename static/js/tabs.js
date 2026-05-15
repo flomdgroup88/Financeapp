@@ -281,7 +281,8 @@ export async function renderBalance() {
 export async function renderExpenses() {
   const el = document.getElementById('exp-content');
   const m2 = String(S.expMonth).padStart(2, '0');
-  const startDate = `${S.expYear}-${m2}-01`, endDate = `${S.expYear}-${m2}-31`;
+  const lastDay   = new Date(S.expYear, S.expMonth, 0).getDate();  // правильный последний день месяца
+  const startDate = `${S.expYear}-${m2}-01`, endDate = `${S.expYear}-${m2}-${lastDay}`;
 
   const mKey  = `/api/stats/monthly?year=${S.expYear}&month=${S.expMonth}`;
   const txKey = `/api/transactions?type=expense&start_date=${startDate}&end_date=${endDate}`;

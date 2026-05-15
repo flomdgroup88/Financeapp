@@ -58,13 +58,11 @@ def authenticate():
 
 
 def _seed_user_if_new(user_id: str):
-    db = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA journal_mode=WAL")
-    db.execute("PRAGMA foreign_keys=ON")
+    # Используем get_db() вместо отдельного соединения,
+    # чтобы не открывать два одновременных коннекта в рамках одного запроса.
+    db = get_db()
 
     if db.execute("SELECT 1 FROM accounts WHERE user_id=? LIMIT 1", (user_id,)).fetchone():
-        db.close()
         return
 
     db.execute(
@@ -131,8 +129,7 @@ def _seed_user_if_new(user_id: str):
                 (user_id, cat_id, limit_amt),
             )
 
-    db.commit()
-    db.close()
+    db.commit()  # commit через общий коннект; close_db() закроет его по завершении запроса
 
 
 # ──────────────────────────────────────────────

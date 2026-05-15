@@ -23,20 +23,3 @@ export function invalidate(...prefixes) {
   }
 }
 
-// Stale-While-Revalidate fetch
-// Returns cached value immediately (if any), and schedules a bg refresh
-export async function swr(fetchFn, key, onUpdate) {
-  const cached = getCached(key);
-  if (cached) {
-    // Return stale data now, refresh in background
-    fetchFn().then(fresh => {
-      setCached(key, fresh);
-      if (onUpdate) onUpdate(fresh);
-    }).catch(() => {});
-    return cached;
-  }
-  // No cache — must wait for fresh data
-  const fresh = await fetchFn();
-  setCached(key, fresh);
-  return fresh;
-}

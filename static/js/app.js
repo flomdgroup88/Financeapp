@@ -88,8 +88,9 @@ window.__forceRenderCurrentTab = () => renderTab(S.tab, true);
 function prefetchAll() {
   const now = new Date();
   const y = now.getFullYear(), m = now.getMonth() + 1;
-  const m2 = String(m).padStart(2, '0');
-  const start = `${y}-${m2}-01`, end = `${y}-${m2}-31`;
+  const m2      = String(m).padStart(2, '0');
+  const lastDay = new Date(y, m, 0).getDate();   // правильный последний день месяца
+  const start = `${y}-${m2}-01`, end = `${y}-${m2}-${lastDay}`;
 
   // Fire-and-forget — just warm the cache
   GETC(`/api/stats/monthly?year=${y}&month=${m}`);
