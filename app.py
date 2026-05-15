@@ -11,7 +11,9 @@ from flask_cors import CORS
 app = Flask(__name__, static_folder="static")
 CORS(app)
 
-DB_PATH   = os.path.join(os.path.dirname(__file__), "finance.db")
+# Railway: use persistent volume if available, fallback to local for dev
+_data_dir = os.environ.get("RAILWAY_VOLUME_MOUNT_PATH") or os.path.dirname(__file__)
+DB_PATH   = os.path.join(_data_dir, "finance.db")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")   # Required in production
 
 
