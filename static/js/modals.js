@@ -4,8 +4,46 @@ import { ICONS_ACC, ICONS_SUB, ICONS_CAT, MONTHS } from './config.js';
 import { renderIconPicker, renderColorPicker } from './pickers.js';
 import { renderTxList } from './components.js';
 
+// ─── TOAST ───────────────────────────────────────────────────
+export function showToast(msg, duration = 2200) {
+  let el = document.getElementById('app-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-toast';
+    el.style.cssText = `
+      position:fixed;bottom:calc(var(--nav-h) + var(--safe-b) + 14px);left:50%;
+      transform:translateX(-50%) translateY(20px);
+      background:rgba(30,30,50,.96);color:#e2e8f0;
+      padding:10px 20px;border-radius:24px;font-size:14px;font-weight:500;
+      box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:999;
+      opacity:0;transition:opacity .22s,transform .22s;pointer-events:none;
+      white-space:nowrap;max-width:90vw;text-align:center;
+    `;
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  clearTimeout(el._tid);
+  requestAnimationFrame(() => {
+    el.style.opacity = '1';
+    el.style.transform = 'translateX(-50%) translateY(0)';
+    el._tid = setTimeout(() => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(-50%) translateY(20px)';
+    }, duration);
+  });
+}
+
+
 // ─── MODAL HELPERS ───────────────────────────────────────────
-export const openModal  = id => document.getElementById(id).classList.add('show');
+export const openModal = id => {
+  const el = document.getElementById(id);
+  el.classList.add('show');
+  // Always scroll modal body to top when opening
+  requestAnimationFrame(() => {
+    const body = el.querySelector('.modal-body');
+    if (body) body.scrollTop = 0;
+  });
+};
 export const closeModal = id => document.getElementById(id).classList.remove('show');
 
 export function initModalDismiss() {
@@ -119,6 +157,7 @@ export async function saveEditTx() {
       closeModal('ov-edit-tx');
       await reloadAccounts();
       window.__renderCurrentTab();
+      showToast('✅ Транзакция обновлена');
     }
   });
 }
@@ -533,7 +572,8 @@ export async function saveBudgets() {
   await withLoading('btn-save-budgets', async () => {
     await Promise.all(saves);
     closeModal('ov-budgets');
-    window.__renderCurrentTab();
+    await window.__renderCurrentTab();
+    showToast('✅ Лимиты сохранены');
   });
 }
 

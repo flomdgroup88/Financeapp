@@ -304,36 +304,42 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   </div>
 </div>
 
-<!-- ★ Edit Transaction (NEW) -->
+<!-- ★ Edit Transaction -->
 <div class="overlay" id="ov-edit-tx">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-hdr"><h3>Редактировать</h3><button class="modal-close" data-close="ov-edit-tx">✕</button></div>
+    <div class="modal-hdr"><h3>✎ Редактировать трату</h3><button class="modal-close" data-close="ov-edit-tx">✕</button></div>
     <div class="modal-body">
-      <div class="fg"><label>Тип</label>
-        <select id="etx-type" class="finput fselect">
-          <option value="expense">💸 Расход</option>
-          <option value="income">💰 Доход</option>
-        </select>
-      </div>
-      <div class="fg"><label>Сумма</label>
-        <input id="etx-amount" class="finput amount-big" type="number" placeholder="0" inputmode="decimal">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Сумма</label>
+          <input id="etx-amount" class="finput" type="number" placeholder="0" inputmode="decimal"
+            style="font-size:22px;font-weight:700;text-align:center;padding:10px 8px">
+        </div>
+        <div class="fg"><label>Тип</label>
+          <select id="etx-type" class="finput fselect">
+            <option value="expense">💸 Расход</option>
+            <option value="income">💰 Доход</option>
+          </select>
+        </div>
       </div>
       <div class="fg"><label>Категория</label>
         <div id="etx-cat-grid" class="cat-grid"></div>
       </div>
-      <div class="fg"><label>Счёт</label>
-        <select id="etx-account" class="finput fselect"></select>
-      </div>
-      <div class="fg"><label>Дата</label>
-        <input id="etx-date" class="finput" type="date">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Счёт</label>
+          <select id="etx-account" class="finput fselect"></select>
+        </div>
+        <div class="fg"><label>Дата</label>
+          <input id="etx-date" class="finput" type="date">
+        </div>
       </div>
       <div class="fg"><label>Комментарий</label>
         <textarea id="etx-comment" class="finput ftextarea" placeholder="Описание..."></textarea>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" id="btn-save-edit-tx">Сохранить изменения</button>
+      <button class="btn btn-secondary btn-sm" data-close="ov-edit-tx" style="width:auto;padding:14px 20px">Отмена</button>
+      <button class="btn btn-primary" id="btn-save-edit-tx">Сохранить</button>
     </div>
   </div>
 </div>
@@ -553,6 +559,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <!-- dynamically filled -->
     </div>
     <div class="modal-footer">
+      <button class="btn btn-secondary btn-sm" data-close="ov-budgets" style="width:auto;padding:14px 20px">Отмена</button>
       <button class="btn btn-primary" id="btn-save-budgets">Сохранить лимиты</button>
     </div>
   </div>
