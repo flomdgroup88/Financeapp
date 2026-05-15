@@ -262,6 +262,40 @@ CREATE INDEX IF NOT EXISTS idx_acc_user   ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_cat_user   ON categories(user_id);
 CREATE INDEX IF NOT EXISTS idx_sub_user   ON subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_bl_user    ON budget_limits(user_id);
+
+CREATE TABLE IF NOT EXISTS savings_goals (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id        TEXT NOT NULL DEFAULT 'default',
+    name           TEXT NOT NULL,
+    target_amount  REAL NOT NULL,
+    saved_amount   REAL NOT NULL DEFAULT 0,
+    icon           TEXT NOT NULL DEFAULT '🎯',
+    color          TEXT NOT NULL DEFAULT '#6366f1',
+    description    TEXT,
+    deadline       TEXT,
+    created_at     TEXT DEFAULT (date('now'))
+);
+
+CREATE TABLE IF NOT EXISTS recurring_transactions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT NOT NULL DEFAULT 'default',
+    name        TEXT NOT NULL,
+    amount      REAL NOT NULL,
+    type        TEXT NOT NULL CHECK(type IN ('expense','income')),
+    category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+    account_id  INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+    period      TEXT NOT NULL DEFAULT 'monthly' CHECK(period IN ('daily','weekly','monthly','yearly')),
+    day_of_month INTEGER,
+    next_date   TEXT,
+    is_active   INTEGER NOT NULL DEFAULT 1,
+    description TEXT,
+    icon        TEXT NOT NULL DEFAULT '🔄',
+    color       TEXT NOT NULL DEFAULT '#6366f1',
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_goal_user ON savings_goals(user_id);
+CREATE INDEX IF NOT EXISTS idx_rec_user  ON recurring_transactions(user_id);
 """
 
 DEFAULT_ACCOUNTS = [
@@ -353,6 +387,38 @@ def migrate_db():
             UNIQUE(user_id, category_id)
         )""",
         "CREATE INDEX IF NOT EXISTS idx_bl_user ON budget_limits(user_id)",
+        # v4 migrations
+        """CREATE TABLE IF NOT EXISTS savings_goals (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id        TEXT NOT NULL DEFAULT 'default',
+            name           TEXT NOT NULL,
+            target_amount  REAL NOT NULL,
+            saved_amount   REAL NOT NULL DEFAULT 0,
+            icon           TEXT NOT NULL DEFAULT '🎯',
+            color          TEXT NOT NULL DEFAULT '#6366f1',
+            description    TEXT,
+            deadline       TEXT,
+            created_at     TEXT DEFAULT (date('now'))
+        )""",
+        """CREATE TABLE IF NOT EXISTS recurring_transactions (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      TEXT NOT NULL DEFAULT 'default',
+            name         TEXT NOT NULL,
+            amount       REAL NOT NULL,
+            type         TEXT NOT NULL CHECK(type IN ('expense','income')),
+            category_id  INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+            account_id   INTEGER REFERENCES accounts(id) ON DELETE SET NULL,
+            period       TEXT NOT NULL DEFAULT 'monthly',
+            day_of_month INTEGER,
+            next_date    TEXT,
+            is_active    INTEGER NOT NULL DEFAULT 1,
+            description  TEXT,
+            icon         TEXT NOT NULL DEFAULT '🔄',
+            color        TEXT NOT NULL DEFAULT '#6366f1',
+            created_at   TEXT DEFAULT (datetime('now'))
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_goal_user ON savings_goals(user_id)",
+        "CREATE INDEX IF NOT EXISTS idx_rec_user  ON recurring_transactions(user_id)",
     ]
     for sql in migrations:
         try:
@@ -1025,6 +1091,158 @@ def stats_comparison():
 
     return jsonify({"current": {"total": curr_total}, "previous": {"total": prev_total},
                     "change_pct": change_pct, "comparison": comparison})
+
+
+# ──────────────────────────────────────────────
+# Savings Goals
+# ──────────────────────────────────────────────
+@app.route("/api/goals", methods=["GET", "POST"])
+def goals():
+    if request.method == "GET":
+        return jsonify({"goals": qall(
+            "SELECT * FROM savings_goals WHERE user_id=? ORDER BY created_at", (uid(),))})
+    d = request.get_json(force=True)
+    target = float(d.get("target_amount", 0))
+    if target <= 0:
+        return jsonify({"error": "target_amount must be > 0"}), 400
+    q("INSERT INTO savings_goals(user_id,name,target_amount,saved_amount,icon,color,description,deadline) VALUES(?,?,?,?,?,?,?,?)",
+      (uid(), d["name"], target, float(d.get("saved_amount", 0)),
+       d.get("icon", "🎯"), d.get("color", "#6366f1"),
+       d.get("description", ""), d.get("deadline")))
+    commit()
+    return jsonify({"ok": True, "id": get_db().lastrowid})
+
+
+@app.route("/api/goals/<int:gid>", methods=["PUT", "DELETE"])
+def goal_item(gid):
+    if request.method == "DELETE":
+        q("DELETE FROM savings_goals WHERE id=? AND user_id=?", (gid, uid()))
+        commit()
+        return jsonify({"ok": True})
+    d = request.get_json(force=True)
+    q("UPDATE savings_goals SET name=?,target_amount=?,saved_amount=?,icon=?,color=?,description=?,deadline=? WHERE id=? AND user_id=?",
+      (d["name"], float(d.get("target_amount", 0)), float(d.get("saved_amount", 0)),
+       d.get("icon", "🎯"), d.get("color", "#6366f1"),
+       d.get("description", ""), d.get("deadline"), gid, uid()))
+    commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/goals/<int:gid>/deposit", methods=["POST"])
+def goal_deposit(gid):
+    goal = qone("SELECT * FROM savings_goals WHERE id=? AND user_id=?", (gid, uid()))
+    if not goal:
+        return jsonify({"error": "not found"}), 404
+    d      = request.get_json(force=True)
+    amount = float(d.get("amount", 0))
+    if amount <= 0:
+        return jsonify({"error": "amount must be > 0"}), 400
+    acc_id  = d.get("account_id")
+    tx_date = date.today().isoformat()
+    new_saved = goal["saved_amount"] + amount
+    q("UPDATE savings_goals SET saved_amount=? WHERE id=? AND user_id=?", (new_saved, gid, uid()))
+    if acc_id:
+        q("UPDATE accounts SET balance=balance-? WHERE id=? AND user_id=?", (amount, acc_id, uid()))
+        q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
+          (uid(), acc_id, amount, "expense", f"Цель: {goal['name']}", tx_date))
+    commit()
+    return jsonify({"ok": True, "saved_amount": new_saved})
+
+
+# ──────────────────────────────────────────────
+# Recurring Transactions
+# ──────────────────────────────────────────────
+def calc_next_recurring_date(period, day_of_month=None, base_date=None):
+    today_dt = base_date or date.today()
+    if period == "daily":
+        return (today_dt + timedelta(days=1)).isoformat()
+    if period == "weekly":
+        return (today_dt + timedelta(days=7)).isoformat()
+    if period == "monthly":
+        bd = int(day_of_month or today_dt.day)
+        return calc_next_date_from_billing_day(bd, today_dt)
+    if period == "yearly":
+        try:
+            return today_dt.replace(year=today_dt.year + 1).isoformat()
+        except ValueError:
+            return today_dt.replace(year=today_dt.year + 1, day=28).isoformat()
+    return (today_dt + timedelta(days=30)).isoformat()
+
+
+@app.route("/api/recurring", methods=["GET", "POST"])
+def recurring():
+    if request.method == "GET":
+        rows = qall("""SELECT r.*,
+                          c.name AS category_name, c.icon AS category_icon,
+                          a.name AS account_name
+                      FROM recurring_transactions r
+                      LEFT JOIN categories c ON c.id=r.category_id
+                      LEFT JOIN accounts   a ON a.id=r.account_id
+                      WHERE r.user_id=? ORDER BY r.is_active DESC, r.next_date""", (uid(),))
+        return jsonify({"recurring": rows})
+    d = request.get_json(force=True)
+    amount = float(d.get("amount", 0))
+    if amount <= 0:
+        return jsonify({"error": "amount > 0 required"}), 400
+    period       = d.get("period", "monthly")
+    day_of_month = int(d.get("day_of_month") or 1) if period == "monthly" else None
+    next_date    = calc_next_recurring_date(period, day_of_month)
+    q("INSERT INTO recurring_transactions(user_id,name,amount,type,category_id,account_id,period,day_of_month,next_date,description,icon,color) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+      (uid(), d["name"], amount, d.get("type", "expense"),
+       d.get("category_id") or None, d.get("account_id") or None,
+       period, day_of_month, next_date,
+       d.get("description", ""), d.get("icon", "🔄"), d.get("color", "#6366f1")))
+    commit()
+    return jsonify({"ok": True, "id": get_db().lastrowid})
+
+
+@app.route("/api/recurring/<int:rid>", methods=["PUT", "DELETE"])
+def recurring_item(rid):
+    if request.method == "DELETE":
+        q("DELETE FROM recurring_transactions WHERE id=? AND user_id=?", (rid, uid()))
+        commit()
+        return jsonify({"ok": True})
+    d = request.get_json(force=True)
+    period       = d.get("period", "monthly")
+    day_of_month = int(d.get("day_of_month") or 1) if period == "monthly" else None
+    next_date    = calc_next_recurring_date(period, day_of_month)
+    q("UPDATE recurring_transactions SET name=?,amount=?,type=?,category_id=?,account_id=?,period=?,day_of_month=?,next_date=?,description=?,icon=?,color=? WHERE id=? AND user_id=?",
+      (d["name"], float(d.get("amount", 0)), d.get("type", "expense"),
+       d.get("category_id") or None, d.get("account_id") or None,
+       period, day_of_month, next_date,
+       d.get("description", ""), d.get("icon", "🔄"), d.get("color", "#6366f1"), rid, uid()))
+    commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/recurring/<int:rid>/toggle", methods=["PUT"])
+def recurring_toggle(rid):
+    q("UPDATE recurring_transactions SET is_active=1-is_active WHERE id=? AND user_id=?", (rid, uid()))
+    commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/recurring/<int:rid>/apply", methods=["POST"])
+def recurring_apply(rid):
+    rec = qone("SELECT * FROM recurring_transactions WHERE id=? AND user_id=?", (rid, uid()))
+    if not rec:
+        return jsonify({"error": "not found"}), 404
+    acc_id = rec.get("account_id")
+    if not acc_id:
+        prio = qone("SELECT id FROM accounts WHERE user_id=? AND is_priority=1 AND is_reserve=0 LIMIT 1", (uid(),))
+        if prio:
+            acc_id = prio["id"]
+    tx_date = date.today().isoformat()
+    amount  = rec["amount"]
+    q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
+      (uid(), acc_id, rec.get("category_id"), amount, rec["type"], rec["name"], tx_date))
+    if acc_id:
+        delta = -amount if rec["type"] == "expense" else amount
+        q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?", (delta, acc_id, uid()))
+    next_date = calc_next_recurring_date(rec["period"], rec.get("day_of_month"))
+    q("UPDATE recurring_transactions SET next_date=? WHERE id=? AND user_id=?", (next_date, rid, uid()))
+    commit()
+    return jsonify({"ok": True, "next_date": next_date, "account_id": acc_id})
 
 
 # ──────────────────────────────────────────────

@@ -1,7 +1,8 @@
 import { S } from './state.js';
 import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx } from './api.js';
 import { getCached } from './cache.js';
-import { handlePickerClick } from './pickers.js';
+import { handlePickerClick, renderIconPicker, renderColorPicker } from './pickers.js';
+import { ICONS_GOAL, ICONS_RECUR } from './config.js';
 import {
   renderDashboard, renderBalance, renderExpenses,
   renderSubscriptions, renderHistory,
@@ -21,6 +22,8 @@ import {
   deleteTx, saveSettings,
   openBudgetsModal, saveBudgets,
   moveAccount,
+  openGoalModal, saveGoal, deleteGoal, openGoalDepositModal, saveGoalDeposit,
+  openRecurModal, onRecurPeriodChange, handleSelRecurCat, saveRecur, deleteRecur, applyRecur, toggleRecur,
 } from './modals.js';
 
 // ─── WIRE MODAL OPENERS INTO TABS MODULE ────────────────────
@@ -30,7 +33,14 @@ setModalOpeners({
 });
 
 // ─── EXPOSE GLOBALS ──────────────────────────────────────────
-window.__modals         = { openModal, closeModal };
+window.__modals         = {
+  openModal, closeModal,
+  openGoalModal, openGoalDepositModal,
+  openRecurModal, applyRecur, toggleRecur,
+};
+window.__pickers        = { renderIconPicker, renderColorPicker };
+window.__ICONS_GOAL     = ICONS_GOAL;
+window.__ICONS_RECUR    = ICONS_RECUR;
 window.__transferModalFn = openTransferModal;
 window.__incomeModalFn   = openIncomeModal;
 
@@ -159,6 +169,8 @@ document.addEventListener('click', async e => {
 
     case 'hist-preset':   setHistPreset(parseInt(el.dataset.months));     break;
     case 'open-acc-detail': openAccModal(parseInt(el.dataset.id));        break;
+
+    case 'sel-recur-cat': handleSelRecurCat(el); break;
   }
 });
 
@@ -203,8 +215,15 @@ wireBtn('btn-save-planned',   savePlanned);
 wireBtn('btn-save-settings',  saveSettings);
 wireBtn('btn-open-settings',  () => openModal('ov-settings'));
 wireBtn('btn-save-budgets',   saveBudgets);
+wireBtn('btn-save-goal',      saveGoal);
+wireBtn('btn-del-goal',       deleteGoal);
+wireBtn('btn-save-goal-deposit', saveGoalDeposit);
+wireBtn('btn-save-recur',     saveRecur);
+wireBtn('btn-del-recur',      deleteRecur);
 wireBtn('fab-expense',        openExpenseModal);
 wireBtn('fab-income',         openIncomeModal);
+const rPeriodEl = document.getElementById('r-period');
+if (rPeriodEl) rPeriodEl.addEventListener('change', onRecurPeriodChange);
 
 // ─── TABS ────────────────────────────────────────────────────
 document.querySelectorAll('.tab-item').forEach(item => {

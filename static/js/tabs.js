@@ -248,6 +248,43 @@ export async function renderBalance() {
     <div class="acc-list">${rsrvAccs.map((a, i) => renderAccCard(a, total, i, rsrvAccs.length, true)).join('')}</div>` : ''}
 
     <div class="sec-hdr">
+      <span class="sec-title">🎯 Цели накопления</span>
+      <button class="sec-btn" id="btn-add-goal">+ Добавить</button>
+    </div>
+    ${S.goals.length === 0
+      ? `<div class="card"><div style="text-align:center;color:var(--hint);padding:12px;font-size:13px">Нет целей. Начни копить на мечту!</div></div>`
+      : S.goals.map(g => {
+          const pct = g.target_amount > 0 ? Math.min(Math.round(g.saved_amount / g.target_amount * 100), 100) : 0;
+          const remaining = Math.max(g.target_amount - g.saved_amount, 0);
+          const barColor = pct >= 100 ? 'var(--green)' : g.color;
+          const daysLeft = g.deadline ? daysUntil(g.deadline) : null;
+          return `<div class="card" style="margin-bottom:8px;cursor:pointer" data-action="open-goal" data-id="${g.id}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <div style="width:42px;height:42px;border-radius:12px;background:${g.color}22;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${g.icon}</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.name}</div>
+                <div style="font-size:11px;color:var(--hint);margin-top:2px">${g.description || ''}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div style="font-size:13px;font-weight:700;color:${barColor}">${fmtRub(g.saved_amount)}</div>
+                <div style="font-size:11px;color:var(--hint)">из ${fmtRub(g.target_amount)}</div>
+              </div>
+            </div>
+            <div style="height:8px;background:var(--divider);border-radius:4px;overflow:hidden;margin-bottom:6px">
+              <div style="height:100%;width:${pct}%;background:${barColor};border-radius:4px;transition:width .5s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--hint)">
+              <span>${pct}%${daysLeft !== null ? ` · ${daysLeft >= 0 ? daysLeft + ' дн' : 'просрочено'}` : ''}</span>
+              ${pct < 100 ? `<span>осталось ${fmtRub(remaining)}</span>` : `<span style="color:var(--green);font-weight:600">✅ Цель достигнута!</span>`}
+            </div>
+            ${pct < 100 ? `<div style="margin-top:10px;display:flex;gap:6px">
+              <button class="btn btn-success btn-sm" data-action="deposit-goal" data-id="${g.id}" style="flex:1">💰 Пополнить</button>
+              <button class="btn btn-secondary btn-sm" data-action="open-goal" data-id="${g.id}">✎</button>
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+
+    <div class="sec-hdr">
       <span class="sec-title">Планируемые поступления</span>
       <button class="sec-btn" id="btn-add-planned">+ Добавить</button>
     </div>
@@ -275,6 +312,11 @@ export async function renderBalance() {
   document.getElementById('btn-add-account').addEventListener('click', () => openAccModal());
   document.getElementById('btn-add-planned').addEventListener('click', () => { const { openModal } = window.__modals; openModal('ov-planned'); });
   document.getElementById('btn-open-transfer').addEventListener('click', () => openTransferModal());
+  document.getElementById('btn-add-goal').addEventListener('click', () => window.__modals.openGoalModal());
+  el.querySelectorAll('[data-action="open-goal"]').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); window.__modals.openGoalModal(parseInt(btn.dataset.id)); }));
+  el.querySelectorAll('[data-action="deposit-goal"]').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); window.__modals.openGoalDepositModal(parseInt(btn.dataset.id)); }));
 }
 
 // ─── EXPENSES ───────────────────────────────────────────────
@@ -410,6 +452,36 @@ export async function renderSubscriptions() {
     return (a.next_date || '').localeCompare(b.next_date || '');
   });
 
+  const PERIOD_LABELS = { daily: 'Ежедневно', weekly: 'Еженедельно', monthly: 'Ежемесячно', yearly: 'Ежегодно' };
+
+  const renderRecurCard = r => {
+    const du = daysUntil(r.next_date);
+    const typeColor = r.type === 'income' ? 'var(--green)' : 'var(--red)';
+    const typeSign  = r.type === 'income' ? '+' : '−';
+    const daysLabel = du === null ? '' : du <= 0 ? 'Сегодня!' : `через ${du} дн`;
+    const daysClass = du !== null && du <= 1 ? 'soon' : du !== null && du <= 5 ? 'mid' : 'ok';
+    return `<div class="sub-card ${r.is_active ? '' : 'sub-inactive'}" style="cursor:pointer" data-action="open-recur" data-id="${r.id}">
+      <div class="sub-card-top">
+        <div class="sub-ico" style="background:${r.color}22">${r.icon}</div>
+        <div class="sub-info">
+          <div class="sub-name">${r.name}</div>
+          <div class="sub-meta">${PERIOD_LABELS[r.period] || r.period}${r.day_of_month ? `, ${r.day_of_month}-го` : ''}${r.account_name ? ` · ${r.account_name}` : ''}</div>
+          ${r.next_date ? `<div class="sub-days ${daysClass}">${daysLabel || fmtDate(r.next_date)}</div>` : ''}
+        </div>
+        <div class="sub-right">
+          <div class="sub-amt" style="color:${typeColor}">${typeSign} ${fmtRub(r.amount)}</div>
+          <div class="sub-period">${r.category_name ? r.category_icon + ' ' + r.category_name : ''}</div>
+        </div>
+      </div>
+      ${r.is_active ? `<div class="sub-card-bottom">
+        <button class="btn btn-secondary btn-sm" data-action="apply-recur" data-id="${r.id}" style="flex:1">▶ Применить сейчас</button>
+        <button class="btn btn-secondary btn-sm" data-action="toggle-recur" data-id="${r.id}">⏸</button>
+      </div>` : `<div class="sub-card-bottom">
+        <button class="btn btn-secondary btn-sm" data-action="toggle-recur" data-id="${r.id}" style="flex:1">▶ Включить</button>
+      </div>`}
+    </div>`;
+  };
+
   el.innerHTML = `
     <div class="grid2">
       <div class="card" style="background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.1));border-color:rgba(99,102,241,.3)">
@@ -430,8 +502,27 @@ export async function renderSubscriptions() {
     ${sorted.length === 0
       ? `<div class="empty"><div class="empty-ico">📋</div><div class="empty-text">Нет подписок</div></div>`
       : sorted.map(s => renderSubCard(s)).join('')}
+
+    <div class="sec-hdr" style="margin-top:8px">
+      <span class="sec-title">🔄 Повторяющиеся</span>
+      <button class="sec-btn" id="btn-add-recur">+ Добавить</button>
+    </div>
+    ${S.recurring.length === 0
+      ? `<div class="card"><div style="text-align:center;color:var(--hint);padding:12px;font-size:13px">Зарплата, аренда, другие регулярные операции</div></div>`
+      : S.recurring.map(r => renderRecurCard(r)).join('')}
+    <div style="height:10px"></div>
   `;
   document.getElementById('btn-add-sub').onclick = () => openSubModal();
+  document.getElementById('btn-add-recur').onclick = () => window.__modals.openRecurModal();
+  el.querySelectorAll('[data-action="open-recur"]').forEach(btn =>
+    btn.addEventListener('click', e => {
+      if (e.target.closest('[data-action="apply-recur"]') || e.target.closest('[data-action="toggle-recur"]')) return;
+      window.__modals.openRecurModal(parseInt(btn.dataset.id));
+    }));
+  el.querySelectorAll('[data-action="apply-recur"]').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); window.__modals.applyRecur(parseInt(btn.dataset.id), btn); }));
+  el.querySelectorAll('[data-action="toggle-recur"]').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); window.__modals.toggleRecur(parseInt(btn.dataset.id)); }));
 }
 
 // ─── HISTORY ────────────────────────────────────────────────

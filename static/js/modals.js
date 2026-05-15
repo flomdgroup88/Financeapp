@@ -1,6 +1,6 @@
 import { S, fmtRub, toRub, today, withLoading } from './state.js';
 import { GET, POST, PUT, DEL, haptic, reloadAccounts, reloadSubscriptions, loadAll, bustTx, bustAcc, bustSub } from './api.js';
-import { ICONS_ACC, ICONS_SUB, ICONS_CAT, MONTHS } from './config.js';
+import { ICONS_ACC, ICONS_SUB, ICONS_CAT, ICONS_GOAL, ICONS_RECUR, MONTHS } from './config.js';
 import { renderIconPicker, renderColorPicker } from './pickers.js';
 import { renderTxList } from './components.js';
 
@@ -656,4 +656,219 @@ export async function moveAccount(id, direction) {
   await PUT(`/api/accounts/${id}/move`, { direction });
   await reloadAccounts();
   window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+}
+
+// ─── SAVINGS GOALS ───────────────────────────────────────────
+export function openGoalModal(id) {
+  S.editGoalId = id || null; S.goalIcon = '🎯'; S.goalColor = '#6366f1';
+  document.getElementById('goal-modal-title').textContent = id ? 'Редактировать цель' : 'Новая цель';
+  document.getElementById('btn-del-goal').style.display = id ? 'block' : 'none';
+  if (id) {
+    const g = S.goals.find(x => x.id === id);
+    if (g) {
+      document.getElementById('g-name').value     = g.name;
+      document.getElementById('g-target').value   = g.target_amount;
+      document.getElementById('g-saved').value    = g.saved_amount;
+      document.getElementById('g-desc').value     = g.description || '';
+      document.getElementById('g-deadline').value = g.deadline || '';
+      S.goalIcon = g.icon; S.goalColor = g.color;
+    }
+  } else {
+    ['g-name', 'g-target', 'g-saved', 'g-desc', 'g-deadline'].forEach(i => { document.getElementById(i).value = ''; });
+  }
+  const { renderIconPicker, renderColorPicker } = window.__pickers;
+  renderIconPicker('g-icon-picker', window.__ICONS_GOAL, S.goalIcon, v => { S.goalIcon = v; });
+  renderColorPicker('g-color-picker-goal', S.goalColor, v => { S.goalColor = v; });
+  openModal('ov-goal');
+  setTimeout(() => document.getElementById('g-name').focus(), 300);
+}
+
+export async function saveGoal() {
+  const name   = document.getElementById('g-name').value.trim();
+  const target = parseFloat(document.getElementById('g-target').value) || 0;
+  if (!name || target <= 0) return;
+  haptic('medium');
+  const body = {
+    name, target_amount: target,
+    saved_amount: parseFloat(document.getElementById('g-saved').value) || 0,
+    description: document.getElementById('g-desc').value.trim(),
+    deadline: document.getElementById('g-deadline').value || null,
+    icon: S.goalIcon, color: S.goalColor,
+  };
+  await withLoading('btn-save-goal', async () => {
+    if (S.editGoalId) await PUT(`/api/goals/${S.editGoalId}`, body);
+    else              await POST('/api/goals', body);
+    closeModal('ov-goal');
+    const data = await GET('/api/goals');
+    S.goals = data.goals || [];
+    window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+    showToast(S.editGoalId ? '✅ Цель обновлена' : '🎯 Цель создана!');
+  });
+}
+
+export async function deleteGoal() {
+  if (!S.editGoalId) return;
+  await DEL(`/api/goals/${S.editGoalId}`);
+  closeModal('ov-goal');
+  const data = await GET('/api/goals');
+  S.goals = data.goals || [];
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+}
+
+export function openGoalDepositModal(id) {
+  S.editGoalId = id;
+  const g = S.goals.find(x => x.id === id);
+  if (!g) return;
+  document.getElementById('gdep-goal-name').textContent = `${g.icon} ${g.name}`;
+  const remaining = Math.max(g.target_amount - g.saved_amount, 0);
+  document.getElementById('gdep-amount').value = '';
+  document.getElementById('gdep-amount').placeholder = `До цели: ${remaining.toLocaleString('ru-RU')} ₽`;
+  const accSel = document.getElementById('gdep-account');
+  accSel.innerHTML = `<option value="">Только отметить (без списания)</option>` +
+    S.accounts.filter(a => !a.is_reserve).map(a =>
+      `<option value="${a.id}" ${a.is_priority ? 'selected' : ''}>${a.icon} ${a.name}</option>`).join('');
+  openModal('ov-goal-deposit');
+  setTimeout(() => document.getElementById('gdep-amount').focus(), 300);
+}
+
+export async function saveGoalDeposit() {
+  const amt   = parseFloat(document.getElementById('gdep-amount').value) || 0;
+  if (!amt || amt <= 0) return;
+  haptic('medium');
+  const accId = document.getElementById('gdep-account').value || null;
+  await withLoading('btn-save-goal-deposit', async () => {
+    const res = await POST(`/api/goals/${S.editGoalId}/deposit`, {
+      amount: amt, account_id: accId ? parseInt(accId) : null,
+    });
+    if (res.ok) {
+      const g = S.goals.find(x => x.id === S.editGoalId);
+      if (g) g.saved_amount = res.saved_amount;
+      if (accId) {
+        const acc = S.accounts.find(a => a.id === parseInt(accId));
+        if (acc) acc.balance -= amt;
+      }
+      closeModal('ov-goal-deposit');
+      window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+      showToast('💰 Накопления обновлены!');
+    }
+  });
+}
+
+// ─── RECURRING TRANSACTIONS ──────────────────────────────────
+export function openRecurModal(id) {
+  S.editRecurId = id || null; S.recurIcon = '🔄'; S.recurColor = '#6366f1'; S.recurCatId = null;
+  document.getElementById('recur-modal-title').textContent = id ? 'Редактировать регулярную' : 'Добавить регулярную';
+  document.getElementById('btn-del-recur').style.display = id ? 'block' : 'none';
+  const accSel = document.getElementById('r-account-id');
+  accSel.innerHTML = `<option value="">Приоритетный (авто)</option>` +
+    S.accounts.map(a => `<option value="${a.id}">${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
+  const buildCatGrid = () => {
+    const grid = document.getElementById('r-cat-grid');
+    grid.innerHTML = `<div class="cg-item ${!S.recurCatId ? 'sel' : ''}" data-id="" data-action="sel-recur-cat">
+      <span class="cg-ico">🚫</span><span class="cg-lbl">Без кат.</span>
+    </div>` + S.categories.map(c =>
+      `<div class="cg-item ${c.id === S.recurCatId ? 'sel' : ''}" data-id="${c.id}" data-action="sel-recur-cat">
+        <span class="cg-ico">${c.icon}</span><span class="cg-lbl">${c.name}</span>
+      </div>`).join('');
+  };
+  if (id) {
+    const r = S.recurring.find(x => x.id === id);
+    if (r) {
+      document.getElementById('r-name').value        = r.name;
+      document.getElementById('r-amount').value      = r.amount;
+      document.getElementById('r-type').value        = r.type;
+      document.getElementById('r-period').value      = r.period;
+      document.getElementById('r-day').value         = r.day_of_month || '';
+      document.getElementById('r-desc').value        = r.description || '';
+      document.getElementById('r-account-id').value  = r.account_id || '';
+      S.recurIcon = r.icon; S.recurColor = r.color; S.recurCatId = r.category_id || null;
+    }
+  } else {
+    ['r-name', 'r-amount', 'r-day', 'r-desc'].forEach(i => { document.getElementById(i).value = ''; });
+    document.getElementById('r-type').value      = 'expense';
+    document.getElementById('r-period').value    = 'monthly';
+    document.getElementById('r-account-id').value = '';
+  }
+  onRecurPeriodChange();
+  buildCatGrid();
+  const { renderIconPicker, renderColorPicker } = window.__pickers;
+  renderIconPicker('r-icon-picker', window.__ICONS_RECUR, S.recurIcon, v => { S.recurIcon = v; });
+  renderColorPicker('r-color-picker-recur', S.recurColor, v => { S.recurColor = v; });
+  openModal('ov-recur');
+  setTimeout(() => document.getElementById('r-name').focus(), 300);
+}
+
+export function onRecurPeriodChange() {
+  const period = document.getElementById('r-period').value;
+  document.getElementById('r-day-wrap').style.display = period === 'monthly' ? 'block' : 'none';
+}
+
+export function handleSelRecurCat(el) {
+  haptic();
+  S.recurCatId = el.dataset.id ? parseInt(el.dataset.id) : null;
+  document.querySelectorAll('#r-cat-grid .cg-item').forEach(i => i.classList.remove('sel'));
+  el.classList.add('sel');
+}
+
+export async function saveRecur() {
+  const name   = document.getElementById('r-name').value.trim();
+  const amount = parseFloat(document.getElementById('r-amount').value) || 0;
+  if (!name || amount <= 0) return;
+  haptic('medium');
+  const period  = document.getElementById('r-period').value;
+  const body = {
+    name, amount, type: document.getElementById('r-type').value,
+    period,
+    day_of_month: period === 'monthly' ? parseInt(document.getElementById('r-day').value) || 1 : null,
+    category_id: S.recurCatId || null,
+    account_id: document.getElementById('r-account-id').value ? parseInt(document.getElementById('r-account-id').value) : null,
+    description: document.getElementById('r-desc').value.trim(),
+    icon: S.recurIcon, color: S.recurColor,
+  };
+  await withLoading('btn-save-recur', async () => {
+    if (S.editRecurId) await PUT(`/api/recurring/${S.editRecurId}`, body);
+    else               await POST('/api/recurring', body);
+    closeModal('ov-recur');
+    const data = await GET('/api/recurring');
+    S.recurring = data.recurring || [];
+    window.__renderTab('subscriptions', true);
+    showToast(S.editRecurId ? '✅ Регулярная обновлена' : '🔄 Регулярная добавлена!');
+  });
+}
+
+export async function deleteRecur() {
+  if (!S.editRecurId) return;
+  await DEL(`/api/recurring/${S.editRecurId}`);
+  closeModal('ov-recur');
+  const data = await GET('/api/recurring');
+  S.recurring = data.recurring || [];
+  window.__renderTab('subscriptions', true);
+}
+
+export async function applyRecur(id, btn) {
+  haptic('medium');
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '...';
+  try {
+    const res = await POST(`/api/recurring/${id}/apply`, {});
+    if (res.ok) {
+      const r = S.recurring.find(x => x.id === id);
+      if (r) r.next_date = res.next_date;
+      const acc = S.accounts.find(a => a.id === res.account_id);
+      if (acc && r) acc.balance += (r.type === 'income' ? r.amount : -r.amount);
+      haptic('success');
+      const data = await GET('/api/recurring');
+      S.recurring = data.recurring || [];
+      window.__renderTab('subscriptions', true);
+      reloadAccounts();
+      showToast(r ? `✅ ${r.name} применено` : '✅ Применено');
+    }
+  } finally { btn.disabled = false; btn.textContent = orig; }
+}
+
+export async function toggleRecur(id) {
+  await PUT(`/api/recurring/${id}/toggle`);
+  const data = await GET('/api/recurring');
+  S.recurring = data.recurring || [];
+  window.__renderTab('subscriptions', true);
 }

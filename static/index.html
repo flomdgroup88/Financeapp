@@ -703,6 +703,96 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   </div>
 </div>
 
+<!-- 🎯 Savings Goal -->
+<div class="overlay" id="ov-goal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr"><h3 id="goal-modal-title">Новая цель</h3><button class="modal-close" data-close="ov-goal">✕</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>Название цели</label><input id="g-name" class="finput" placeholder="Отпуск, машина, iPhone..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Цель (₽)</label><input id="g-target" class="finput" type="number" placeholder="50000" inputmode="decimal"></div>
+        <div class="fg"><label>Уже накоплено (₽)</label><input id="g-saved" class="finput" type="number" placeholder="0" inputmode="decimal"></div>
+      </div>
+      <div class="fg"><label>Описание</label><input id="g-desc" class="finput" placeholder="Зачем коплю..."></div>
+      <div class="fg"><label>Дедлайн (необязательно)</label><input id="g-deadline" class="finput" type="date"></div>
+      <div class="fg"><label>Иконка</label><div class="icon-picker" id="g-icon-picker"></div></div>
+      <div class="fg"><label>Цвет</label><div class="color-picker" id="g-color-picker-goal"></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-del-goal" style="display:none">Удалить</button>
+      <button class="btn btn-primary" id="btn-save-goal">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- 💰 Goal Deposit -->
+<div class="overlay" id="ov-goal-deposit">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr"><h3>Пополнить цель</h3><button class="modal-close" data-close="ov-goal-deposit">✕</button></div>
+    <div class="modal-body">
+      <div id="gdep-goal-name" style="font-size:18px;font-weight:700;text-align:center;padding:12px 0 16px"></div>
+      <div class="fg"><label>Сумма (₽)</label>
+        <input id="gdep-amount" class="finput amount-big" type="number" inputmode="decimal">
+      </div>
+      <div class="fg"><label>Списать со счёта</label>
+        <select id="gdep-account" class="finput fselect"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="btn-save-goal-deposit">💰 Пополнить</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🔄 Recurring Transaction -->
+<div class="overlay" id="ov-recur">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-hdr"><h3 id="recur-modal-title">Регулярная транзакция</h3><button class="modal-close" data-close="ov-recur">✕</button></div>
+    <div class="modal-body">
+      <div class="fg"><label>Название</label><input id="r-name" class="finput" placeholder="Зарплата, Аренда, Кредит..."></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Сумма (₽)</label><input id="r-amount" class="finput" type="number" placeholder="0" inputmode="decimal"></div>
+        <div class="fg"><label>Тип</label>
+          <select id="r-type" class="finput fselect">
+            <option value="income">💰 Доход</option>
+            <option value="expense">💸 Расход</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="fg"><label>Периодичность</label>
+          <select id="r-period" class="finput fselect">
+            <option value="daily">Ежедневно</option>
+            <option value="weekly">Еженедельно</option>
+            <option value="monthly">Ежемесячно</option>
+            <option value="yearly">Ежегодно</option>
+          </select>
+        </div>
+        <div class="fg" id="r-day-wrap">
+          <label>День месяца</label>
+          <input id="r-day" class="finput" type="number" min="1" max="31" placeholder="1">
+        </div>
+      </div>
+      <div class="fg"><label>Категория</label>
+        <div id="r-cat-grid" class="cat-grid"></div>
+      </div>
+      <div class="fg"><label>Счёт</label>
+        <select id="r-account-id" class="finput fselect"></select>
+      </div>
+      <div class="fg"><label>Описание</label><textarea id="r-desc" class="finput ftextarea" placeholder="Примечание..."></textarea></div>
+      <div class="fg"><label>Иконка</label><div class="icon-picker" id="r-icon-picker"></div></div>
+      <div class="fg"><label>Цвет</label><div class="color-picker" id="r-color-picker-recur"></div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="btn-del-recur" style="display:none">Удалить</button>
+      <button class="btn btn-primary" id="btn-save-recur">Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <!-- Header button wiring (before module load) -->
 <script>
   // These buttons delegate to the ES module after it loads

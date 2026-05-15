@@ -1,16 +1,19 @@
 // ─── STATE ──────────────────────────────────────────────────
 export const S = {
   tab: 'dashboard',
-  accounts: [], categories: [], subscriptions: [], planned: [],
+  accounts: [], categories: [], subscriptions: [], planned: [], goals: [], recurring: [],
   usdRate: 90,
   expYear:  new Date().getFullYear(),
   expMonth: new Date().getMonth() + 1,
   histStart: '', histEnd: '', histSearch: '', histOffset: 0, histTxs: [],
   selCatId: null,
   editAccId: null, editSubId: null, editCatId: null, editTxId: null, editTxFromId: null,
+  editGoalId: null, editRecurId: null, recurCatId: null,
   accPriority: false, accReserve: false, accIcon: '💰', accColor: '#6366f1',
   subIcon: '🔔',  subColor: '#6366f1',
   catIcon: '📦',  catColor: '#6366f1',
+  goalIcon: '🎯', goalColor: '#6366f1',
+  recurIcon: '🔄', recurColor: '#6366f1',
   txCatId: null,  // used by tx-edit modal
 };
 
