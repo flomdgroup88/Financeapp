@@ -167,6 +167,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .finput:focus{border-color:var(--accent)}
 .finput::placeholder{color:var(--hint)}
 .ftextarea{height:64px;resize:none}
+/* Voice input */
+.voice-wrap{position:relative}
+.voice-wrap .finput{padding-right:44px}
+.voice-btn{position:absolute;right:8px;bottom:8px;width:30px;height:30px;border-radius:50%;border:none;background:var(--card-b);color:var(--text);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,transform .15s;flex-shrink:0}
+.voice-btn:active{transform:scale(.88)}
+.voice-btn.listening{background:rgba(239,68,68,.25);animation:pulse-mic .8s ease-in-out infinite}
+@keyframes pulse-mic{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.4)}50%{box-shadow:0 0 0 7px rgba(239,68,68,0)}}
 .fselect{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
 .amount-big{font-size:36px;font-weight:700;text-align:center;background:none;border:none;border-bottom:2px solid var(--accent);border-radius:0;padding:10px 0}
 /* Category grid */
@@ -411,7 +418,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <input id="e-date" class="finput" type="date">
       </div>
       <div class="fg"><label>Комментарий</label>
-        <textarea id="e-comment" class="finput ftextarea" placeholder="Что это было?"></textarea>
+        <div class="voice-wrap">
+          <textarea id="e-comment" class="finput ftextarea" placeholder="Что это было?"></textarea>
+          <button class="voice-btn" data-target="e-comment" title="Голосовой ввод">🎤</button>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
@@ -461,7 +471,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
           </div>
         </div>
         <div class="fg"><label>Комментарий</label>
-          <textarea id="etx-comment" class="finput ftextarea" placeholder="Описание..."></textarea>
+          <div class="voice-wrap">
+            <textarea id="etx-comment" class="finput ftextarea" placeholder="Описание..."></textarea>
+            <button class="voice-btn" data-target="etx-comment" title="Голосовой ввод">🎤</button>
+          </div>
         </div>
       </div>
       <!-- Transfer-specific fields -->
@@ -507,7 +520,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <input id="i-date" class="finput" type="date">
       </div>
       <div class="fg"><label>Описание</label>
-        <textarea id="i-comment" class="finput ftextarea" placeholder="Зарплата, фриланс, возврат..."></textarea>
+        <div class="voice-wrap">
+          <textarea id="i-comment" class="finput ftextarea" placeholder="Зарплата, фриланс, возврат..."></textarea>
+          <button class="voice-btn" data-target="i-comment" title="Голосовой ввод">🎤</button>
+        </div>
       </div>
     </div>
     <div class="modal-footer">

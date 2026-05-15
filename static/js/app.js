@@ -238,6 +238,67 @@ document.querySelectorAll('.tab-item').forEach(item => {
 // ─── MODAL DISMISS ───────────────────────────────────────────
 initModalDismiss();
 
+// ─── VOICE INPUT ─────────────────────────────────────────────
+(function initVoiceInput() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return; // Browser doesn't support — buttons just won't appear
+
+  let activeRecog = null;
+
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.voice-btn');
+    if (!btn) return;
+
+    // If already listening — stop
+    if (activeRecog) {
+      activeRecog.stop();
+      activeRecog = null;
+      document.querySelectorAll('.voice-btn.listening').forEach(b => b.classList.remove('listening'));
+      return;
+    }
+
+    const targetId = btn.dataset.target;
+    const textarea = document.getElementById(targetId);
+    if (!textarea) return;
+
+    haptic();
+
+    const recog = new SR();
+    recog.lang = 'ru-RU';
+    recog.interimResults = false;
+    recog.maxAlternatives = 1;
+
+    recog.onstart = () => {
+      btn.classList.add('listening');
+      btn.textContent = '⏹';
+      activeRecog = recog;
+    };
+
+    recog.onresult = e => {
+      const text = e.results[0][0].transcript;
+      // Append to existing text, or set if empty
+      textarea.value = textarea.value
+        ? textarea.value + ' ' + text
+        : text;
+      haptic('success');
+    };
+
+    recog.onerror = err => {
+      if (err.error === 'not-allowed') {
+        alert('Нет доступа к микрофону. Разреши в настройках браузера.');
+      }
+    };
+
+    recog.onend = () => {
+      btn.classList.remove('listening');
+      btn.textContent = '🎤';
+      activeRecog = null;
+    };
+
+    recog.start();
+  });
+})();
+
 // ─── KEYBOARD SHORTCUTS ──────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
