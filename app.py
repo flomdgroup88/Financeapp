@@ -282,6 +282,8 @@ CREATE INDEX IF NOT EXISTS idx_tx_date    ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_tx_type    ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_tx_cat     ON transactions(category_id);
 CREATE INDEX IF NOT EXISTS idx_tx_account ON transactions(account_id);
+-- Составной индекс: ускоряет stats-запросы (WHERE user_id=? AND date>=? AND date<=?)
+CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_acc_user   ON accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_cat_user   ON categories(user_id);
 CREATE INDEX IF NOT EXISTS idx_sub_user   ON subscriptions(user_id);
@@ -459,6 +461,8 @@ def migrate_db():
             expires_at TEXT NOT NULL
         )""",
         "CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id)",
+        # производительность stats-запросов
+        "CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date)",
     ]
     for sql in migrations:
         try:
@@ -1091,7 +1095,7 @@ def stats_monthly():
     year  = int(request.args.get("year",  date.today().year))
     month = int(request.args.get("month", date.today().month))
     start = f"{year}-{month:02d}-01"
-    end   = f"{year}-{month:02d}-31"
+    end   = date(year, month, calendar.monthrange(year, month)[1]).isoformat()
 
     total_exp = qone(
         "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='expense' AND date>=? AND date<=?",
@@ -1128,7 +1132,7 @@ def stats_comparison():
     cy, cm   = today_dt.year, today_dt.month
     py, pm   = (cy - 1, 12) if cm == 1 else (cy, cm - 1)
 
-    def mr(y, m): return f"{y}-{m:02d}-01", f"{y}-{m:02d}-31"
+    def mr(y, m): return f"{y}-{m:02d}-01", date(y, m, calendar.monthrange(y, m)[1]).isoformat()
     cs, ce = mr(cy, cm)
     ps, pe = mr(py, pm)
 
@@ -1177,18 +1181,21 @@ def stats_yearly():
         "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='income' AND date>=? AND date<=?",
         (uid(), start, end))["v"]
 
-    # Monthly breakdown (income + expenses per month)
-    monthly = []
-    for m in range(1, 13):
-        ms = f"{year}-{m:02d}-01"
-        me = f"{year}-{m:02d}-31"
-        exp_m = qone(
-            "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='expense' AND date>=? AND date<=?",
-            (uid(), ms, me))["v"]
-        inc_m = qone(
-            "SELECT COALESCE(SUM(amount),0) AS v FROM transactions WHERE user_id=? AND type='income' AND date>=? AND date<=?",
-            (uid(), ms, me))["v"]
-        monthly.append({"month": m, "expenses": exp_m, "income": inc_m})
+    # Monthly breakdown — один запрос вместо 24 (12 месяцев × 2 типа)
+    rows = qall(
+        """SELECT CAST(strftime('%m', date) AS INTEGER) AS month,
+                  type,
+                  COALESCE(SUM(amount), 0) AS total
+           FROM transactions
+           WHERE user_id=? AND date>=? AND date<=?
+             AND type IN ('expense','income')
+           GROUP BY month, type""",
+        (uid(), start, end))
+    month_map = {m: {"month": m, "expenses": 0.0, "income": 0.0} for m in range(1, 13)}
+    for r in rows:
+        key = "expenses" if r["type"] == "expense" else "income"
+        month_map[r["month"]][key] = r["total"]
+    monthly = [month_map[m] for m in range(1, 13)]
 
     # Top categories for the year
     by_cat = qall(
@@ -1403,14 +1410,14 @@ def _get_local_user(username: str) -> dict | None:
     return {"user_id": f"local_{username}", "hash": row["value"]} if row else None
 
 def _create_session(user_id: str) -> str:
-    """Создаёт новый токен, сохраняет в sessions, возвращает токен."""
-    token      = secrets.token_urlsafe(32)
-    expires_at = (datetime.utcnow() + timedelta(days=SESSION_DAYS)).isoformat()
+    token   = secrets.token_hex(32)
+    expires = (datetime.utcnow() + timedelta(days=30)).isoformat()
     db = sqlite3.connect(DB_PATH)
-    db.execute(
-        "INSERT INTO sessions(token, user_id, expires_at) VALUES(?,?,?)",
-        (token, user_id, expires_at)
-    )
+    # Заодно чистим протухшие сессии этого пользователя
+    db.execute("DELETE FROM sessions WHERE expires_at < ? OR user_id=?",
+               (datetime.utcnow().isoformat(), user_id))
+    db.execute("INSERT INTO sessions(token, user_id, expires_at) VALUES(?,?,?)",
+               (token, user_id, expires))
     db.commit()
     db.close()
     return token

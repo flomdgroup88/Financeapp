@@ -16,6 +16,20 @@ export const localAuth = {
   clear()      { this.token = ''; },
 };
 
+// ─── TOAST HELPER ───────────────────────────────────────────
+function showErrorToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = '⚠️ ' + msg;
+  Object.assign(t.style, {
+    position:'fixed', bottom:'80px', left:'50%', transform:'translateX(-50%)',
+    background:'#ef4444', color:'#fff', padding:'10px 18px',
+    borderRadius:'12px', fontSize:'13px', zIndex:9999,
+    boxShadow:'0 4px 12px rgba(0,0,0,.3)', pointerEvents:'none',
+  });
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
 // ─── HTTP ───────────────────────────────────────────────────
 const API = window.location.origin;
 
@@ -24,19 +38,24 @@ async function req(method, path, body) {
   if (TG_INIT_DATA)         headers['X-Telegram-Init-Data'] = TG_INIT_DATA;
   if (localAuth.token)      headers['X-Session-Token']       = localAuth.token;
 
-  const r = await fetch(API + path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  try {
+    const r = await fetch(API + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
 
-  if (r.status === 401) {
-    // Токен истёк или недействителен — показываем экран входа
-    localAuth.clear();
-    window.__showAuthScreen?.();
+    if (r.status === 401) {
+      localAuth.clear();
+      window.__showAuthScreen?.();
+      return {};
+    }
+    return r.json();
+  } catch (err) {
+    showErrorToast('Нет связи с сервером');
+    console.error('API error:', method, path, err);
     return {};
   }
-  return r.json();
 }
 
 export const GET  = p      => req('GET',    p);
