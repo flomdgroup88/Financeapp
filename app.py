@@ -476,6 +476,24 @@ def migrate_db():
 def index():
     return send_from_directory("static", "index.html")
 
+@app.route("/manifest.json")
+def manifest():
+    return send_from_directory("static", "manifest.json",
+                               mimetype="application/manifest+json")
+
+@app.route("/sw.js")
+def service_worker():
+    # Service worker должен отдаваться с корня сайта
+    resp = send_from_directory("static", "sw.js",
+                               mimetype="application/javascript")
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+@app.route("/icons/<filename>")
+def icons(filename):
+    return send_from_directory("static/icons", filename)
+
 
 # ──────────────────────────────────────────────
 # Settings
