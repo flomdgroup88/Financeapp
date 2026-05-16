@@ -3,7 +3,7 @@ Finance Telegram Mini App — Flask backend v3
 Run: python app.py
 """
 
-import os, json, sqlite3, calendar, hmac, hashlib, urllib.parse, logging
+import os, json, sqlite3, calendar, hmac, hashlib, urllib.parse, logging, secrets
 from datetime import datetime, date, timedelta
 from flask import Flask, g, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
@@ -45,21 +45,42 @@ def verify_telegram_init_data(init_data_raw: str):
 
 @app.before_request
 def authenticate():
+    # Публичные маршруты — не требуют авторизации
     if request.path == "/" or not request.path.startswith("/api"):
         return
+    # Эндпоинты авторизации — публичные
+    if request.path.startswith("/api/auth/"):
+        return
 
+    # ── Режим разработки (BOT_TOKEN не задан) ──────────────────
     if not BOT_TOKEN:
         g.user_id = "dev"
         _seed_user_if_new("dev")
         return
 
+    # ── Приоритет 1: Telegram Mini App ─────────────────────────
     init_data = request.headers.get("X-Telegram-Init-Data", "")
     user_id   = verify_telegram_init_data(init_data)
-    if not user_id:
-        return jsonify({"error": "unauthorized"}), 401
+    if user_id:
+        g.user_id = user_id
+        _seed_user_if_new(user_id)
+        return
 
-    g.user_id = user_id
-    _seed_user_if_new(user_id)
+    # ── Приоритет 2: резервный вход по сессионному токену ──────
+    token = request.headers.get("X-Session-Token", "")
+    if token:
+        db  = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        row = db.execute(
+            "SELECT user_id, expires_at FROM sessions WHERE token=?", (token,)
+        ).fetchone()
+        db.close()
+        if row and row["expires_at"] > datetime.utcnow().isoformat():
+            g.user_id = row["user_id"]
+            _seed_user_if_new(row["user_id"])
+            return
+
+    return jsonify({"error": "unauthorized"}), 401
 
 
 def _seed_user_if_new(user_id: str):
@@ -299,6 +320,14 @@ CREATE TABLE IF NOT EXISTS recurring_transactions (
 
 CREATE INDEX IF NOT EXISTS idx_goal_user ON savings_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_rec_user  ON recurring_transactions(user_id);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id);
 """
 
 DEFAULT_ACCOUNTS = [
@@ -422,6 +451,14 @@ def migrate_db():
         )""",
         "CREATE INDEX IF NOT EXISTS idx_goal_user ON savings_goals(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_rec_user  ON recurring_transactions(user_id)",
+        # v5 — резервный вход (local auth)
+        """CREATE TABLE IF NOT EXISTS sessions (
+            token      TEXT PRIMARY KEY,
+            user_id    TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id)",
     ]
     for sql in migrations:
         try:
@@ -1324,6 +1361,143 @@ def recurring_apply(rid):
 
 
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# Local auth helpers
+# ──────────────────────────────────────────────
+
+SESSION_DAYS = 30   # сколько дней живёт токен
+
+def _hash_password(password: str) -> str:
+    """PBKDF2-HMAC-SHA256, 260 000 итераций — достаточно для SQLite-хранилища."""
+    salt = hashlib.sha256(b"finance-app-salt").digest()   # фиксированная соль на приложение
+    dk   = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
+    return dk.hex()
+
+def _get_local_user(username: str) -> dict | None:
+    """Возвращает запись пользователя из settings или None."""
+    db  = sqlite3.connect(DB_PATH)
+    db.row_factory = sqlite3.Row
+    row = db.execute(
+        "SELECT value FROM settings WHERE user_id=? AND key='local_password_hash'",
+        (f"local_{username}",)
+    ).fetchone()
+    db.close()
+    return {"user_id": f"local_{username}", "hash": row["value"]} if row else None
+
+def _create_session(user_id: str) -> str:
+    """Создаёт новый токен, сохраняет в sessions, возвращает токен."""
+    token      = secrets.token_urlsafe(32)
+    expires_at = (datetime.utcnow() + timedelta(days=SESSION_DAYS)).isoformat()
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        "INSERT INTO sessions(token, user_id, expires_at) VALUES(?,?,?)",
+        (token, user_id, expires_at)
+    )
+    db.commit()
+    db.close()
+    return token
+
+
+# ──────────────────────────────────────────────
+# Auth API  (публичные — без авторизации)
+# ──────────────────────────────────────────────
+
+@app.route("/api/auth/status")
+def api_auth_status():
+    """Говорит клиенту, настроен ли локальный пароль, работает ли Telegram."""
+    tg_active = bool(BOT_TOKEN)
+    # Есть ли хоть один локальный пользователь?
+    db  = sqlite3.connect(DB_PATH)
+    row = db.execute(
+        "SELECT 1 FROM settings WHERE key='local_password_hash' LIMIT 1"
+    ).fetchone()
+    db.close()
+    return jsonify({"telegram": tg_active, "local_auth_configured": bool(row)})
+
+
+@app.route("/api/auth/setup", methods=["POST"])
+def api_auth_setup():
+    """
+    Первичная настройка локального входа.
+    Тело: {"username": "...", "password": "..."}
+    Если пользователь уже существует — вернёт 409.
+    """
+    d        = request.get_json(force=True) or {}
+    username = (d.get("username") or "").strip().lower()
+    password = (d.get("password") or "").strip()
+
+    if not username or not password:
+        return jsonify({"error": "Заполните логин и пароль"}), 400
+    if len(username) < 3 or len(username) > 32:
+        return jsonify({"error": "Логин: от 3 до 32 символов"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Пароль: минимум 6 символов"}), 400
+
+    user_id = f"local_{username}"
+    if _get_local_user(username):
+        return jsonify({"error": "Пользователь уже существует"}), 409
+
+    # Сохраняем хэш пароля в settings
+    db = sqlite3.connect(DB_PATH)
+    db.execute(
+        "INSERT INTO settings(user_id, key, value) VALUES(?,?,?)",
+        (user_id, "local_password_hash", _hash_password(password))
+    )
+    db.commit()
+    db.close()
+
+    # Сразу засеваем начальные данные и выдаём токен
+    with app.app_context():
+        g._db = sqlite3.connect(DB_PATH)
+        g._db.row_factory = sqlite3.Row
+        g._db.execute("PRAGMA journal_mode=WAL")
+        g.user_id = user_id
+        _seed_user_if_new(user_id)
+        g._db.close()
+
+    token = _create_session(user_id)
+    return jsonify({"ok": True, "token": token, "user_id": user_id})
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    """
+    Вход по логину и паролю.
+    Тело: {"username": "...", "password": "..."}
+    Возвращает: {"token": "...", "user_id": "..."}
+    """
+    d        = request.get_json(force=True) or {}
+    username = (d.get("username") or "").strip().lower()
+    password = (d.get("password") or "").strip()
+
+    if not username or not password:
+        return jsonify({"error": "Заполните логин и пароль"}), 400
+
+    user = _get_local_user(username)
+    if not user:
+        return jsonify({"error": "Неверный логин или пароль"}), 401
+
+    # Сравниваем хэши через hmac.compare_digest — защита от timing attack
+    expected = _hash_password(password)
+    if not hmac.compare_digest(expected, user["hash"]):
+        return jsonify({"error": "Неверный логин или пароль"}), 401
+
+    token = _create_session(user["user_id"])
+    return jsonify({"ok": True, "token": token, "user_id": user["user_id"]})
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    """Удаляет текущий токен из БД."""
+    token = request.headers.get("X-Session-Token", "")
+    if token:
+        db = sqlite3.connect(DB_PATH)
+        db.execute("DELETE FROM sessions WHERE token=?", (token,))
+        db.commit()
+        db.close()
+    return jsonify({"ok": True})
+
+
 # ──────────────────────────────────────────────
 # Backup API
 # ──────────────────────────────────────────────
