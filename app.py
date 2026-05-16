@@ -2,25 +2,11 @@
 Finance Telegram Mini App — Flask backend v3
 Запуск: python app.py
 
-Структура проекта:
-  app.py          — точка входа, регистрация Blueprint-ов
-  db.py           — соединение с БД, схема, хелперы, дефолтные данные
-  auth.py         — Telegram HMAC, сессии, локальный вход
-  backup.py       — резервное копирование
-  routes/
-    static_files.py  — HTML, CSS, JS, иконки
-    settings.py      — /api/settings
-    accounts.py      — /api/accounts
-    transfers.py     — /api/transfers
-    categories.py    — /api/categories
-    transactions.py  — /api/transactions
-    budgets.py       — /api/budget-limits
-    subscriptions.py — /api/subscriptions
-    planned.py       — /api/planned-income
-    stats.py         — /api/stats/*
-    goals.py         — /api/goals
-    recurring.py     — /api/recurring
-    backup.py        — /api/backup/*
+Структура:
+  app.py          — точка входа
+  db.py           — БД, схема, хелперы
+  auth.py         — авторизация
+  routes/         — маршруты по темам
 """
 
 import os, logging, sqlite3, threading, time
@@ -83,26 +69,45 @@ for bp in (
 ):
     app.register_blueprint(bp)
 
-init_db()
-migrate_db()
+# ── Health check — Railway проверяет этот эндпоинт ────────────
+@app.route("/health")
+def health():
+    return jsonify({"ok": True}), 200
 
-def _cleanup_sessions():
-    while True:
-        try:
-            db = sqlite3.connect(DB_PATH)
-            deleted = db.execute(
-                "DELETE FROM sessions WHERE expires_at < datetime('now')"
-            ).rowcount
-            db.commit()
-            db.close()
-            if deleted:
-                logging.info(f"Session cleanup: removed {deleted} expired session(s)")
-        except Exception as e:
-            logging.warning(f"Session cleanup error: {e}")
-        time.sleep(86400)
+# ──────────────────────────────────────────────
+# Инициализация БД и фоновые задачи
+# Запускаем в отдельном потоке — не блокируем старт Gunicorn.
+# Gunicorn с --preload выполнит этот код один раз до форка воркеров.
+# ──────────────────────────────────────────────
+def _startup():
+    try:
+        init_db()
+        migrate_db()
+        logging.info("✅ DB ready")
+    except Exception as e:
+        logging.error(f"DB init error: {e}")
 
-threading.Thread(target=_cleanup_sessions, daemon=True, name="session-cleanup").start()
-bkp.init(DB_PATH)
+    def _cleanup_sessions():
+        while True:
+            try:
+                db = sqlite3.connect(DB_PATH)
+                deleted = db.execute(
+                    "DELETE FROM sessions WHERE expires_at < datetime('now')"
+                ).rowcount
+                db.commit()
+                db.close()
+                if deleted:
+                    logging.info(f"Session cleanup: removed {deleted} expired session(s)")
+            except Exception as e:
+                logging.warning(f"Session cleanup error: {e}")
+            time.sleep(86400)
+
+    threading.Thread(target=_cleanup_sessions, daemon=True, name="session-cleanup").start()
+    bkp.init(DB_PATH)
+
+# Запускаем сразу — с --preload это выполнится до форка воркеров,
+# а без него — при первом импорте модуля (что тоже ок).
+_startup()
 
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5000))
