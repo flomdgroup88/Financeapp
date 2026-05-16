@@ -4,7 +4,22 @@ import { getCached, setCached, invalidate } from './cache.js';
 // ─── TELEGRAM ───────────────────────────────────────────────
 export const tg     = window.Telegram?.WebApp;
 export const haptic = (t = 'light') => tg?.HapticFeedback?.impactOccurred(t);
-if (tg) { tg.expand(); tg.disableVerticalSwipes?.(); }
+
+if (tg) {
+  tg.expand();
+  tg.disableVerticalSwipes?.();
+
+  // env(safe-area-inset-top) часто возвращает 0 внутри Telegram WebView —
+  // читаем реальное значение из Telegram API и ставим CSS-переменную вручную.
+  function applySafeArea() {
+    const tgTop = tg.safeAreaInset?.top ?? tg.contentSafeAreaInset?.top ?? 0;
+    if (tgTop > 0) {
+      document.documentElement.style.setProperty('--safe-t', tgTop + 'px');
+    }
+  }
+  applySafeArea();
+  tg.onEvent?.('viewportChanged', applySafeArea);
+}
 
 const TG_INIT_DATA = tg?.initData || '';
 
