@@ -270,6 +270,7 @@ def migrate_db():
             UNIQUE(user_id, category_id)
         )""",
         "CREATE INDEX IF NOT EXISTS idx_bl_user ON budget_limits(user_id)",
+        "ALTER TABLE subscriptions  ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS savings_goals (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id        TEXT NOT NULL DEFAULT 'default',

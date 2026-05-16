@@ -33,20 +33,6 @@ from auth import authenticate, auth_bp
 app.before_request(authenticate)
 app.register_blueprint(auth_bp)
 
-@app.route("/api/bootstrap", methods=["GET"])
-def bootstrap():
-    from db import uid
-    u = uid()
-    cfg = qone("SELECT value FROM settings WHERE user_id=? AND key='usd_rate'", (u,))
-    return jsonify({
-        "accounts":       qall("SELECT * FROM accounts WHERE user_id=? ORDER BY sort_order, id", (u,)),
-        "usd_rate":       float(cfg["value"]) if cfg else 90,
-        "categories":     qall("SELECT * FROM categories WHERE user_id=? ORDER BY sort_order, id", (u,)),
-        "subscriptions":  qall("SELECT * FROM subscriptions WHERE user_id=? ORDER BY sort_order, id", (u,)),
-        "planned_income": qall("SELECT * FROM planned_income WHERE user_id=? ORDER BY id", (u,)),
-        "goals":          qall("SELECT * FROM savings_goals WHERE user_id=? ORDER BY id", (u,)),
-        "recurring":      qall("SELECT * FROM recurring_transactions WHERE user_id=? ORDER BY id", (u,)),
-    })
 
 from routes.static_files  import static_bp
 from routes.settings      import settings_bp
