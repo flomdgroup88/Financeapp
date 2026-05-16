@@ -91,6 +91,8 @@ async function renderTab(tab, force = false) {
 }
 
 window.__renderCurrentTab = (force) => renderTab(S.tab, force);
+window.__S = S;
+window.__loadHistoryData = () => loadHistoryData();
 window.__renderTab        = (tab, force) => renderTab(tab, force);
 // Force-render (called after mutations)
 window.__forceRenderCurrentTab = () => renderTab(S.tab, true);
@@ -321,66 +323,322 @@ document.addEventListener('keydown', e => {
 });
 
 // ─── AUTH SCREEN ─────────────────────────────────────────────
+// ─── AUTH SCREEN STYLES ──────────────────────────────────────
+(function injectAuthStyles() {
+  if (document.getElementById('auth-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'auth-styles';
+  s.textContent = `
+    @keyframes auth-float-in {
+      from { opacity:0; transform:translateY(28px) scale(.97); }
+      to   { opacity:1; transform:translateY(0)    scale(1);   }
+    }
+    @keyframes auth-fade-in {
+      from { opacity:0; } to { opacity:1; }
+    }
+    @keyframes auth-orb-pulse {
+      0%,100% { transform:scale(1)   translateY(0);   opacity:.55; }
+      50%      { transform:scale(1.1) translateY(-8px); opacity:.8;  }
+    }
+    @keyframes auth-orb2-pulse {
+      0%,100% { transform:scale(1)   translateY(0);   opacity:.4; }
+      50%      { transform:scale(1.08) translateY(6px); opacity:.65; }
+    }
+    @keyframes auth-spin {
+      to { transform:rotate(360deg); }
+    }
+    @keyframes auth-shimmer {
+      0%   { background-position:200% center; }
+      100% { background-position:-200% center; }
+    }
+    @keyframes auth-bar {
+      0%   { width:0%;   opacity:.9; }
+      60%  { width:75%;  opacity:1;  }
+      100% { width:100%; opacity:0;  }
+    }
+    @keyframes auth-check-draw {
+      from { stroke-dashoffset:40; }
+      to   { stroke-dashoffset:0;  }
+    }
+
+    #auth-screen {
+      position:fixed;inset:0;z-index:9999;
+      background:#0f0f1a;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      padding:24px;
+      overflow:hidden;
+    }
+
+    /* Декоративные орбы */
+    .auth-orb {
+      position:absolute;border-radius:50%;filter:blur(60px);pointer-events:none;
+    }
+    .auth-orb-1 {
+      width:280px;height:280px;
+      background:radial-gradient(circle, rgba(99,102,241,.35) 0%, transparent 70%);
+      top:-60px;left:-60px;
+      animation:auth-orb-pulse 6s ease-in-out infinite;
+    }
+    .auth-orb-2 {
+      width:220px;height:220px;
+      background:radial-gradient(circle, rgba(139,92,246,.3) 0%, transparent 70%);
+      bottom:-40px;right:-40px;
+      animation:auth-orb2-pulse 8s ease-in-out infinite;
+    }
+    .auth-orb-3 {
+      width:140px;height:140px;
+      background:radial-gradient(circle, rgba(99,102,241,.2) 0%, transparent 70%);
+      bottom:30%;left:10%;
+      animation:auth-orb-pulse 10s ease-in-out infinite reverse;
+    }
+
+    /* Сетка-точки (тонкая) */
+    #auth-screen::before {
+      content:'';position:absolute;inset:0;
+      background-image:radial-gradient(circle, rgba(99,102,241,.12) 1px, transparent 1px);
+      background-size:32px 32px;
+      pointer-events:none;
+    }
+
+    /* Карточка формы */
+    .auth-card {
+      position:relative;z-index:1;
+      width:100%;max-width:360px;
+      background:rgba(26,26,46,.8);
+      border:1px solid rgba(99,102,241,.2);
+      border-radius:20px;
+      padding:32px 28px;
+      backdrop-filter:blur(20px);
+      animation:auth-float-in .5s cubic-bezier(.22,.68,0,1.2) both;
+    }
+
+    /* Логотип */
+    .auth-logo-wrap {
+      display:flex;flex-direction:column;align-items:center;margin-bottom:28px;
+      animation:auth-float-in .5s cubic-bezier(.22,.68,0,1.2) .05s both;
+    }
+    .auth-logo-ring {
+      width:64px;height:64px;border-radius:18px;
+      background:linear-gradient(135deg,rgba(99,102,241,.3),rgba(139,92,246,.3));
+      border:1px solid rgba(99,102,241,.4);
+      display:flex;align-items:center;justify-content:center;
+      font-size:30px;margin-bottom:14px;
+      box-shadow:0 0 24px rgba(99,102,241,.25);
+    }
+    .auth-title {
+      font-size:22px;font-weight:700;color:#e2e8f0;letter-spacing:-.3px;
+    }
+    .auth-subtitle {
+      font-size:13px;color:#64748b;margin-top:4px;text-align:center;
+    }
+
+    /* Поля ввода */
+    .auth-field {
+      position:relative;margin-bottom:12px;
+      animation:auth-float-in .45s cubic-bezier(.22,.68,0,1.2) both;
+    }
+    .auth-field:nth-child(1) { animation-delay:.1s; }
+    .auth-field:nth-child(2) { animation-delay:.16s; }
+
+    .auth-input-icon {
+      position:absolute;left:13px;top:50%;transform:translateY(-50%);
+      font-size:17px;color:#64748b;pointer-events:none;transition:color .2s;
+    }
+    .auth-input {
+      width:100%;background:rgba(15,15,26,.6);
+      border:1px solid rgba(99,102,241,.18);
+      border-radius:12px;padding:13px 15px 13px 40px;
+      font-size:15px;color:#e2e8f0;outline:none;
+      font-family:inherit;transition:border-color .2s,box-shadow .2s;
+      -webkit-appearance:none;box-sizing:border-box;
+    }
+    .auth-input::placeholder { color:#64748b; }
+    .auth-input:focus {
+      border-color:rgba(99,102,241,.6);
+      box-shadow:0 0 0 3px rgba(99,102,241,.12);
+    }
+    .auth-input:focus + .auth-input-icon { color:#6366f1; }
+
+    /* Кнопка */
+    .auth-btn {
+      width:100%;padding:14px;border:none;border-radius:12px;
+      background:linear-gradient(135deg,#6366f1,#818cf8);
+      color:#fff;font-size:16px;font-weight:700;cursor:pointer;
+      transition:opacity .15s,transform .1s;
+      margin-top:4px;margin-bottom:12px;
+      font-family:inherit;letter-spacing:-.2px;
+      box-shadow:0 4px 16px rgba(99,102,241,.35);
+      animation:auth-float-in .45s cubic-bezier(.22,.68,0,1.2) .22s both;
+    }
+    .auth-btn:active { opacity:.85;transform:scale(.98); }
+    .auth-btn:disabled { opacity:.5;cursor:not-allowed;transform:none; }
+
+    /* Переключатель режима */
+    .auth-toggle-wrap {
+      text-align:center;
+      animation:auth-float-in .45s cubic-bezier(.22,.68,0,1.2) .28s both;
+    }
+    .auth-toggle-btn {
+      background:none;border:none;color:#64748b;
+      font-size:13px;cursor:pointer;
+      font-family:inherit;
+      transition:color .2s;
+    }
+    .auth-toggle-btn:hover { color:#a5b4fc; }
+
+    /* Ошибка */
+    .auth-error {
+      display:none;
+      background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.22);
+      border-radius:10px;padding:10px 14px;margin-bottom:14px;
+      color:#f87171;font-size:13px;text-align:center;
+    }
+
+    /* ── Экран загрузки ─────────────────────────────── */
+    #auth-loading {
+      position:fixed;inset:0;z-index:10000;
+      background:#0f0f1a;
+      display:flex;flex-direction:column;
+      align-items:center;justify-content:center;
+      gap:0;
+      animation:auth-fade-in .25s ease both;
+      overflow:hidden;
+    }
+    #auth-loading::before {
+      content:'';position:absolute;inset:0;
+      background-image:radial-gradient(circle, rgba(99,102,241,.1) 1px, transparent 1px);
+      background-size:32px 32px;pointer-events:none;
+    }
+    .auth-loading-orb1 {
+      position:absolute;width:350px;height:350px;border-radius:50%;
+      background:radial-gradient(circle, rgba(99,102,241,.28) 0%, transparent 65%);
+      filter:blur(50px);top:-80px;left:-80px;
+      animation:auth-orb-pulse 5s ease-in-out infinite;
+    }
+    .auth-loading-orb2 {
+      position:absolute;width:260px;height:260px;border-radius:50%;
+      background:radial-gradient(circle, rgba(139,92,246,.22) 0%, transparent 65%);
+      filter:blur(40px);bottom:-50px;right:-50px;
+      animation:auth-orb2-pulse 7s ease-in-out infinite;
+    }
+
+    .auth-loading-logo {
+      position:relative;z-index:1;
+      width:80px;height:80px;border-radius:22px;
+      background:linear-gradient(135deg,rgba(99,102,241,.25),rgba(139,92,246,.25));
+      border:1px solid rgba(99,102,241,.3);
+      display:flex;align-items:center;justify-content:center;
+      font-size:38px;margin-bottom:28px;
+      box-shadow:0 0 32px rgba(99,102,241,.2);
+      animation:auth-float-in .5s cubic-bezier(.22,.68,0,1.2) both;
+    }
+    .auth-loading-title {
+      position:relative;z-index:1;
+      font-size:20px;font-weight:700;
+      background:linear-gradient(90deg,#818cf8,#e2e8f0,#818cf8);
+      background-size:200% auto;
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      background-clip:text;
+      animation:auth-shimmer 2.5s linear infinite,auth-float-in .5s cubic-bezier(.22,.68,0,1.2) .05s both;
+      margin-bottom:8px;letter-spacing:-.3px;
+    }
+    .auth-loading-sub {
+      position:relative;z-index:1;
+      font-size:13px;color:#64748b;margin-bottom:36px;
+      animation:auth-float-in .5s ease .12s both;
+    }
+    .auth-loading-bar-wrap {
+      position:relative;z-index:1;
+      width:180px;height:3px;background:rgba(99,102,241,.12);
+      border-radius:99px;overflow:hidden;margin-bottom:28px;
+    }
+    .auth-loading-bar {
+      height:100%;
+      background:linear-gradient(90deg,#6366f1,#818cf8,#6366f1);
+      background-size:200% 100%;
+      border-radius:99px;
+      animation:auth-bar 2.2s cubic-bezier(.4,0,.2,1) forwards,
+                auth-shimmer 1.2s linear infinite;
+    }
+    .auth-loading-dots {
+      position:relative;z-index:1;
+      display:flex;gap:6px;
+    }
+    .auth-loading-dots span {
+      width:6px;height:6px;border-radius:50%;
+      background:#6366f1;opacity:.3;
+      animation:auth-orb-pulse 1.2s ease-in-out infinite;
+    }
+    .auth-loading-dots span:nth-child(2) { animation-delay:.2s; }
+    .auth-loading-dots span:nth-child(3) { animation-delay:.4s; }
+  `;
+  document.head.appendChild(s);
+})();
+
 function buildAuthScreen(mode = 'login') {
   return `
-  <div id="auth-screen" style="
-    position:fixed;inset:0;z-index:9999;
-    background:var(--bg);
-    display:flex;flex-direction:column;
-    align-items:center;justify-content:center;
-    padding:24px;
-  ">
-    <div style="width:100%;max-width:360px">
-      <div style="text-align:center;margin-bottom:32px">
-        <div style="font-size:52px;margin-bottom:10px">💰</div>
-        <div style="font-size:22px;font-weight:700">Финансы</div>
-        <div style="font-size:13px;color:var(--hint);margin-top:4px">
+  <div id="auth-screen">
+    <div class="auth-orb auth-orb-1"></div>
+    <div class="auth-orb auth-orb-2"></div>
+    <div class="auth-orb auth-orb-3"></div>
+
+    <div class="auth-card">
+      <div class="auth-logo-wrap">
+        <div class="auth-logo-ring">💰</div>
+        <div class="auth-title">Финансы</div>
+        <div class="auth-subtitle">
           ${mode === 'setup' ? 'Создайте аккаунт для входа' : 'Войдите в свой аккаунт'}
         </div>
       </div>
 
-      <div id="auth-error" style="
-        display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);
-        border-radius:10px;padding:10px 14px;margin-bottom:14px;
-        color:#f87171;font-size:13px;text-align:center;
-      "></div>
+      <div id="auth-error" class="auth-error"></div>
 
-      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
-        <input id="auth-username" type="text" autocomplete="username"
-          placeholder="Логин" style="
-          background:var(--surface);border:1px solid var(--border);
-          border-radius:12px;padding:13px 15px;
-          font-size:16px;color:var(--text);width:100%;outline:none;
-          font-family:inherit;
-        ">
-        <input id="auth-password" type="password" autocomplete="${mode === 'setup' ? 'new-password' : 'current-password'}"
-          placeholder="Пароль${mode === 'setup' ? ' (минимум 6 символов)' : ''}" style="
-          background:var(--surface);border:1px solid var(--border);
-          border-radius:12px;padding:13px 15px;
-          font-size:16px;color:var(--text);width:100%;outline:none;
-          font-family:inherit;
-        ">
+      <div style="display:flex;flex-direction:column">
+        <div class="auth-field">
+          <input id="auth-username" class="auth-input" type="text"
+            autocomplete="username" placeholder="Логин">
+          <span class="auth-input-icon">👤</span>
+        </div>
+        <div class="auth-field">
+          <input id="auth-password" class="auth-input" type="password"
+            autocomplete="${mode === 'setup' ? 'new-password' : 'current-password'}"
+            placeholder="Пароль${mode === 'setup' ? ' (мин. 6 символов)' : ''}">
+          <span class="auth-input-icon">🔒</span>
+        </div>
       </div>
 
-      <button id="auth-submit" style="
-        width:100%;padding:14px;border:none;border-radius:12px;
-        background:var(--accent);color:#fff;
-        font-size:16px;font-weight:700;cursor:pointer;
-        transition:opacity .15s;margin-bottom:12px;
-      ">
+      <button id="auth-submit" class="auth-btn">
         ${mode === 'setup' ? 'Создать аккаунт' : 'Войти'}
       </button>
 
-      <div style="text-align:center">
-        <button id="auth-toggle" style="
-          background:none;border:none;color:var(--hint);
-          font-size:13px;cursor:pointer;text-decoration:underline;
-        ">
+      <div class="auth-toggle-wrap">
+        <button id="auth-toggle" class="auth-toggle-btn">
           ${mode === 'setup' ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Создать'}
         </button>
       </div>
     </div>
   </div>`;
+}
+
+function showLoadingScreen() {
+  const el = document.createElement('div');
+  el.id = 'auth-loading';
+  el.innerHTML = `
+    <div class="auth-loading-orb1"></div>
+    <div class="auth-loading-orb2"></div>
+    <div class="auth-loading-logo">💰</div>
+    <div class="auth-loading-title">Загружаем данные</div>
+    <div class="auth-loading-sub">Это займёт секунду…</div>
+    <div class="auth-loading-bar-wrap">
+      <div class="auth-loading-bar"></div>
+    </div>
+    <div class="auth-loading-dots">
+      <span></span><span></span><span></span>
+    </div>
+  `;
+  document.body.appendChild(el);
+  return el;
 }
 
 function showAuthScreen(mode = 'login') {
@@ -405,28 +663,25 @@ function showAuthScreen(mode = 'login') {
     if (!username || !password) { showErr('Заполните все поля'); return; }
 
     submitBtn.disabled = true;
-    submitBtn.textContent = '...';
+    submitBtn.textContent = 'Проверяем…';
     errBox.style.display = 'none';
 
     const fn   = mode === 'setup' ? authSetup : authLogin;
     const data = await fn(username, password);
 
-    submitBtn.disabled = false;
-    submitBtn.textContent = mode === 'setup' ? 'Создать аккаунт' : 'Войти';
+    if (data.error) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = mode === 'setup' ? 'Создать аккаунт' : 'Войти';
+      showErr(data.error);
+      return;
+    }
 
-    if (data.error) { showErr(data.error); return; }
-
-    // Успех — показываем состояние загрузки прямо на экране входа
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Загружаем…';
-    errBox.style.display = 'none';
-    usernameI.disabled = true;
-    passwordI.disabled = true;
-
-    // Сохраняем токен и загружаем приложение
+    // Успех — показываем красивый экран загрузки
     localAuth.token = data.token;
     document.getElementById('auth-screen').remove();
+    showLoadingScreen();
     await bootApp();
+    document.getElementById('auth-loading')?.remove();
   }
 
   submitBtn.onclick = submit;
@@ -484,14 +739,18 @@ async function bootApp() {
 
   if (tgHasData) {
     // Внутри Telegram — авторизация через initData, экран входа не нужен
+    const _ld = showLoadingScreen();
     await bootApp();
+    _ld.remove();
     return;
   }
 
   if (localAuth.token) {
     // Есть сохранённый токен — пробуем сразу загрузить
     // api.js сам вызовет __showAuthScreen если 401
+    const _ld = showLoadingScreen();
     await bootApp();
+    _ld.remove();
     return;
   }
 

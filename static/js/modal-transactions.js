@@ -257,5 +257,11 @@ export async function deleteTx(id) {
   await DEL(`/api/transactions/${id}`);
   bustTx();
   await reloadAccounts();
-  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+  // Если удаление произошло в истории — перезагрузить только результаты,
+  // не трогая фильтры и UI (иначе renderHistory() сбрасывает всё в исходное состояние)
+  if (window.__S?.tab === 'history' && typeof window.__loadHistoryData === 'function') {
+    window.__loadHistoryData();
+  } else {
+    window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+  }
 }

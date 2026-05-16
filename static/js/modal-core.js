@@ -46,20 +46,34 @@ export function initModalDismiss() {
   document.querySelectorAll('.overlay').forEach(ov =>
     ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); }));
 
-  // iOS / Telegram: не скроллим принудительно при фокусе — 
-  // браузер сам поднимает поле к клавиатуре. Принудительный scroll
-  // вызывал эффект «прыжка» и скрывал верх модалки.
-
+  // Фикс клавиатуры на iOS / Telegram:
+  // Когда появляется клавиатура, visualViewport уменьшается.
+  // Мы двигаем .overlay так, чтобы он занимал именно видимую область —
+  // тогда модалка остаётся снизу видимой зоны, прямо над клавиатурой.
   if (window.visualViewport) {
     const onVpResize = () => {
-      const vvh = window.visualViewport.height;
-      const wh  = window.innerHeight;
+      const vvh      = window.visualViewport.height;
+      const vvOffset = window.visualViewport.offsetTop;
+      const wh       = window.innerHeight;
       const keyboardH = Math.max(0, wh - vvh);
-      // Только сжимаем модалку по высоте — не скроллим страницу
-      document.querySelectorAll('.overlay.show .modal').forEach(modal => {
-        modal.style.maxHeight = keyboardH > 80 ? `${vvh * 0.88}px` : '';
+
+      document.querySelectorAll('.overlay.show').forEach(ov => {
+        const modal = ov.querySelector('.modal');
+        if (!modal) return;
+        if (keyboardH > 80) {
+          ov.style.top    = vvOffset + 'px';
+          ov.style.height = vvh + 'px';
+          ov.style.bottom = 'auto';
+          modal.style.maxHeight = (vvh * 0.92) + 'px';
+        } else {
+          ov.style.top    = '';
+          ov.style.height = '';
+          ov.style.bottom = '';
+          modal.style.maxHeight = '';
+        }
       });
     };
     window.visualViewport.addEventListener('resize', onVpResize);
+    window.visualViewport.addEventListener('scroll', onVpResize);
   }
 }
