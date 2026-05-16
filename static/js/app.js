@@ -450,13 +450,21 @@ async function bootApp() {
     setTimeout(() => spl.remove(), 450);
   }
 
-  // 3. Рендерим дашборд (покажет скелетон мгновенно, данные догрузит фоном)
+  // 3. Рендерим дашборд через renderTab (корректно ставит активную вкладку)
   await renderTab('dashboard');
 
-  // 4. Pre-render баланса и подписок — они рендерятся синхронно из S,
-  //    поэтому пользователь увидит готовый контент при первом переходе
-  renderTab('balance');
-  renderTab('subscriptions');
+  // 4. Тихий pre-render баланса и подписок БЕЗ переключения вкладки.
+  //    Вызываем рендереры напрямую — S уже заполнен loadAll(), рендер мгновенный.
+  //    renderTab() нельзя — он меняет S.tab и active-классы, ломая навигацию.
+  try {
+    await renderBalance();
+    tabLastRender['balance'] = Date.now();
+  } catch (e) { console.warn('pre-render balance', e); }
+
+  try {
+    await renderSubscriptions();
+    tabLastRender['subscriptions'] = Date.now();
+  } catch (e) { console.warn('pre-render subscriptions', e); }
 
   if ('requestIdleCallback' in window) {
     requestIdleCallback(prefetchAll, { timeout: 2500 });
