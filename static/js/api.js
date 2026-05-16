@@ -5,21 +5,53 @@ import { getCached, setCached, invalidate } from './cache.js';
 export const tg     = window.Telegram?.WebApp;
 export const haptic = (t = 'light') => tg?.HapticFeedback?.impactOccurred(t);
 
-if (tg) {
-  tg.expand();
-  tg.disableVerticalSwipes?.();
+// ─── SAFE AREA (работает и в Telegram, и в PWA) ─────────────
+(function initSafeArea() {
+  // Способ 1: Telegram Mini App даёт точное значение напрямую
+  if (tg) {
+    tg.expand();
+    tg.disableVerticalSwipes?.();
 
-  // env(safe-area-inset-top) часто возвращает 0 внутри Telegram WebView —
-  // читаем реальное значение из Telegram API и ставим CSS-переменную вручную.
-  function applySafeArea() {
-    const tgTop = tg.safeAreaInset?.top ?? tg.contentSafeAreaInset?.top ?? 0;
-    if (tgTop > 0) {
-      document.documentElement.style.setProperty('--safe-t', tgTop + 'px');
+    function applyTgSafeArea() {
+      const top = tg.safeAreaInset?.top ?? tg.contentSafeAreaInset?.top ?? 0;
+      if (top > 0) {
+        document.documentElement.style.setProperty('--safe-t', top + 'px');
+        return true;
+      }
+      return false;
     }
+    if (!applyTgSafeArea()) {
+      // Telegram ещё не готов — ждём события
+      tg.onEvent?.('viewportChanged', applyTgSafeArea);
+    }
+    return; // Telegram справится сам
   }
-  applySafeArea();
-  tg.onEvent?.('viewportChanged', applySafeArea);
-}
+
+  // Способ 2: PWA / браузер — измеряем env() через зонд-элемент.
+  // getComputedStyle умеет вычислять env() в реальные пиксели,
+  // в отличие от прямого чтения CSS-переменной.
+  const probe = document.createElement('div');
+  probe.style.cssText = [
+    'position:fixed', 'top:0', 'left:0', 'width:0', 'height:0',
+    'padding-top:env(safe-area-inset-top,0px)',
+    'pointer-events:none', 'visibility:hidden',
+  ].join(';');
+  document.documentElement.appendChild(probe);
+
+  const measured = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+  document.documentElement.removeChild(probe);
+
+  // Если env() вернул 0 и мы в standalone (PWA) — ставим минимальный fallback.
+  // На iPhone с Dynamic Island = 59px, с чёлкой = 44px, без = ~20px.
+  // 44px — безопасный минимум для всех iPhone с вырезом.
+  const isStandalone = window.navigator.standalone ||
+                       window.matchMedia('(display-mode: standalone)').matches;
+  const safeTop = measured > 0 ? measured : (isStandalone ? 44 : 0);
+
+  if (safeTop > 0) {
+    document.documentElement.style.setProperty('--safe-t', safeTop + 'px');
+  }
+})();
 
 const TG_INIT_DATA = tg?.initData || '';
 
@@ -142,21 +174,15 @@ export const bustRecur = () => bust('/api/recurring', '/api/accounts', '/api/tra
 
 // ─── DATA LOADERS ───────────────────────────────────────────
 export async function loadAll() {
-  const [accsData, catsData, subsData, planData, goalsData, recurData] = await Promise.all([
-    GET('/api/accounts'),
-    GET('/api/categories'),
-    GET('/api/subscriptions'),
-    GET('/api/planned-income'),
-    GET('/api/goals'),
-    GET('/api/recurring'),
-  ]);
-  S.accounts      = accsData.accounts       || [];
-  S.usdRate       = parseFloat(accsData.usd_rate || 90);
-  S.categories    = catsData.categories     || [];
-  S.subscriptions = subsData.subscriptions  || [];
-  S.planned       = planData.planned_income || [];
-  S.goals         = goalsData.goals         || [];
-  S.recurring     = recurData.recurring     || [];
+  // Один запрос вместо шести — экономим 5 RTT при каждом старте
+  const d = await GET('/api/bootstrap');
+  S.accounts      = d.accounts       || [];
+  S.usdRate       = parseFloat(d.usd_rate || 90);
+  S.categories    = d.categories     || [];
+  S.subscriptions = d.subscriptions  || [];
+  S.planned       = d.planned_income || [];
+  S.goals         = d.goals          || [];
+  S.recurring     = d.recurring      || [];
   document.getElementById('cfg-usd').value = S.usdRate;
 }
 

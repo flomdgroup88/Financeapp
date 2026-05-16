@@ -1,7 +1,7 @@
 // sw.js — сервис-воркер для PWA-режима
 // Кэширует оболочку приложения, API-запросы всегда идут в сеть
 
-const CACHE = 'finance-shell-v1';
+const CACHE = 'finance-shell-v2';
 const SHELL = [
   '/',
   '/manifest.json',
