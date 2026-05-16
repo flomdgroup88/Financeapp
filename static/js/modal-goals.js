@@ -25,7 +25,6 @@ export function openGoalModal(id) {
   renderIconPicker('g-icon-picker', window.__ICONS_GOAL, S.goalIcon, v => { S.goalIcon = v; });
   renderColorPicker('g-color-picker-goal', S.goalColor, v => { S.goalColor = v; });
   openModal('ov-goal');
-  setTimeout(() => document.getElementById('g-name').focus(), 300);
 }
 
 export async function saveGoal() {
@@ -73,7 +72,6 @@ export function openGoalDepositModal(id) {
     S.accounts.filter(a => !a.is_reserve).map(a =>
       `<option value="${a.id}" ${a.is_priority ? 'selected' : ''}>${a.icon} ${a.name}</option>`).join('');
   openModal('ov-goal-deposit');
-  setTimeout(() => document.getElementById('gdep-amount').focus(), 300);
 }
 
 export async function saveGoalDeposit() {

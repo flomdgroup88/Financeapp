@@ -19,7 +19,6 @@ export function openCatModal(id) {
   renderIconPicker('c-icon-picker', ICONS_CAT, S.catIcon, v => { S.catIcon = v; });
   renderColorPicker('c-color-picker', S.catColor, v => { S.catColor = v; });
   openModal('ov-cat');
-  setTimeout(() => document.getElementById('c-name').focus(), 300);
 }
 
 export async function saveCat() {

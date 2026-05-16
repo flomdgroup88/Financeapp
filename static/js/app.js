@@ -441,16 +441,19 @@ function showAuthScreen(mode = 'login') {
 // ─── BOOT ────────────────────────────────────────────────────
 async function bootApp() {
   // 1. Загружаем все базовые данные (один bootstrap-запрос)
-  await loadAll();
-
-  // 2. Сразу скрываем сплэш — данные уже в памяти, дальше только рендер
-  const spl = document.getElementById('splash-screen');
-  if (spl) {
-    spl.classList.add('hidden');
-    setTimeout(() => spl.remove(), 450);
+  try {
+    await loadAll();
+  } catch (err) {
+    console.error('bootApp: loadAll failed', err);
+    // Show error toast
+    const t = document.createElement('div');
+    t.innerHTML = '❌ Не удалось загрузить данные. <button onclick="location.reload()" style="margin-left:8px;padding:4px 14px;border-radius:16px;border:none;background:#fff;color:#ef4444;font-size:13px;cursor:pointer">Повторить</button>';
+    Object.assign(t.style, {position:'fixed',bottom:'80px',left:'50%',transform:'translateX(-50%)',background:'#ef4444',color:'#fff',padding:'10px 18px',borderRadius:'12px',fontSize:'13px',zIndex:'9999',boxShadow:'0 4px 12px rgba(0,0,0,.3)',textAlign:'center',whiteSpace:'nowrap'});
+    document.body.appendChild(t);
+    return;
   }
 
-  // 3. Рендерим дашборд через renderTab (корректно ставит активную вкладку)
+  // 2. Рендерим дашборд через renderTab (корректно ставит активную вкладку)
   await renderTab('dashboard');
 
   // 4. Тихий pre-render баланса и подписок БЕЗ переключения вкладки.
@@ -504,4 +507,5 @@ async function bootApp() {
   // Показываем нужный экран
   showAuthScreen(status.local_auth_configured ? 'login' : 'setup');
 })();
+
 

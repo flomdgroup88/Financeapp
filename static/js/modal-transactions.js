@@ -20,7 +20,6 @@ export function openExpenseModal() {
   const prio = S.accounts.find(a => a.is_priority);
   if (prio) accSel.value = prio.id;
   openModal('ov-expense');
-  setTimeout(() => document.getElementById('e-amount').focus(), 300);
 }
 
 export function handleSelCat(el) {
@@ -60,7 +59,6 @@ export function openIncomeModal() {
   const prio = S.accounts.find(a => a.is_priority);
   if (prio) accSel.value = prio.id;
   openModal('ov-income');
-  setTimeout(() => document.getElementById('i-amount').focus(), 300);
 }
 
 export async function saveIncome() {
@@ -101,7 +99,6 @@ export function openTransferModal(fromId) {
   document.getElementById('t-date').value   = today();
   document.getElementById('t-conv-hint').style.display = 'none';
   openModal('ov-transfer');
-  setTimeout(() => document.getElementById('t-amount').focus(), 300);
 }
 
 export function updateConvHint() {

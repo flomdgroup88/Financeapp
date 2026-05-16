@@ -30,7 +30,6 @@ export function openAccModal(id) {
   renderIconPicker('a-icon-picker', ICONS_ACC, S.accIcon, v => { S.accIcon = v; });
   renderColorPicker('a-color-picker', S.accColor, v => { S.accColor = v; });
   openModal('ov-account');
-  setTimeout(() => document.getElementById('a-name').focus(), 300);
 }
 
 export async function saveAccount() {

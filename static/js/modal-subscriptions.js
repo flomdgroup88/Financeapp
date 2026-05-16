@@ -46,7 +46,6 @@ export function openSubModal(id) {
   renderIconPicker('s-icon-picker', ICONS_SUB, S.subIcon, v => { S.subIcon = v; });
   renderColorPicker('s-color-picker', S.subColor, v => { S.subColor = v; });
   openModal('ov-sub');
-  setTimeout(() => document.getElementById('s-name').focus(), 300);
 }
 
 export async function saveSub() {
@@ -148,7 +147,6 @@ export function openRecurModal(id) {
   renderIconPicker('r-icon-picker', window.__ICONS_RECUR, S.recurIcon, v => { S.recurIcon = v; });
   renderColorPicker('r-color-picker-recur', S.recurColor, v => { S.recurColor = v; });
   openModal('ov-recur');
-  setTimeout(() => document.getElementById('r-name').focus(), 300);
 }
 
 export function onRecurPeriodChange() {

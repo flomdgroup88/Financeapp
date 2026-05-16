@@ -46,30 +46,20 @@ export function initModalDismiss() {
   document.querySelectorAll('.overlay').forEach(ov =>
     ov.addEventListener('click', e => { if (e.target === ov) closeModal(ov.id); }));
 
-  document.addEventListener('focusin', e => {
-    const field = e.target;
-    if (!field.matches('textarea, input')) return;
-    const modalBody = field.closest('.modal-body');
-    if (!modalBody) return;
-    setTimeout(() => { field.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 380);
-  });
+  // iOS / Telegram: не скроллим принудительно при фокусе — 
+  // браузер сам поднимает поле к клавиатуре. Принудительный scroll
+  // вызывал эффект «прыжка» и скрывал верх модалки.
 
   if (window.visualViewport) {
     const onVpResize = () => {
       const vvh = window.visualViewport.height;
       const wh  = window.innerHeight;
       const keyboardH = Math.max(0, wh - vvh);
+      // Только сжимаем модалку по высоте — не скроллим страницу
       document.querySelectorAll('.overlay.show .modal').forEach(modal => {
-        modal.style.maxHeight = keyboardH > 80 ? `${vvh * 0.97}px` : '';
+        modal.style.maxHeight = keyboardH > 80 ? `${vvh * 0.88}px` : '';
       });
-      if (keyboardH > 80) {
-        const focused = document.activeElement;
-        if (focused && focused.closest('.modal-body')) {
-          setTimeout(() => focused.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
-        }
-      }
     };
     window.visualViewport.addEventListener('resize', onVpResize);
-    window.visualViewport.addEventListener('scroll', onVpResize);
   }
 }

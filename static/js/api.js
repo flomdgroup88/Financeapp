@@ -93,6 +93,11 @@ async function req(method, path, body) {
     });
 
     if (r.status === 401) {
+      if (TG_INIT_DATA) {
+        // Inside Telegram — no login screen available, show error toast
+        showErrorToast('Ошибка авторизации. Перезапустите приложение.');
+        throw new Error('401 in Telegram context');
+      }
       localAuth.clear();
       window.__showAuthScreen?.();
       return {};
@@ -179,6 +184,12 @@ export async function loadAll() {
   if (splSub) splSub.textContent = 'Загружаем данные…';
 
   const d = await GET('/api/bootstrap');
+
+  // If bootstrap returns empty (network error etc) — throw so bootApp can show splash error
+  if (!d || (!d.accounts && !d.categories)) {
+    if (splSub) splSub.textContent = '❌ Ошибка загрузки';
+    throw new Error('bootstrap returned empty response');
+  }
 
   if (splSub) splSub.textContent = 'Готово ✓';
 
