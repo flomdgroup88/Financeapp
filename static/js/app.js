@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx } from './api.js';
+import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx, authLogin, authSetup, authLogout, authStatus, localAuth } from './api.js';
 import { getCached } from './cache.js';
 import { handlePickerClick, renderIconPicker, renderColorPicker } from './pickers.js';
 import { ICONS_GOAL, ICONS_RECUR } from './config.js';
@@ -216,6 +216,12 @@ wireBtn('btn-del-cat',        deleteCat);
 wireBtn('btn-save-planned',   savePlanned);
 wireBtn('btn-save-settings',  saveSettings);
 wireBtn('btn-open-settings',  () => openModal('ov-settings'));
+wireBtn('btn-logout', async () => {
+  if (!confirm('Выйти из аккаунта?')) return;
+  await authLogout();
+  // Перезагружаем страницу — покажется экран входа
+  window.location.reload();
+});
 wireBtn('btn-save-budgets',   saveBudgets);
 wireBtn('btn-save-goal',      saveGoal);
 wireBtn('btn-del-goal',       deleteGoal);
@@ -314,15 +320,157 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ─── AUTH SCREEN ─────────────────────────────────────────────
+function buildAuthScreen(mode = 'login') {
+  return `
+  <div id="auth-screen" style="
+    position:fixed;inset:0;z-index:9999;
+    background:var(--bg);
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    padding:24px;
+  ">
+    <div style="width:100%;max-width:360px">
+      <div style="text-align:center;margin-bottom:32px">
+        <div style="font-size:52px;margin-bottom:10px">💰</div>
+        <div style="font-size:22px;font-weight:700">Финансы</div>
+        <div style="font-size:13px;color:var(--hint);margin-top:4px">
+          ${mode === 'setup' ? 'Создайте аккаунт для входа' : 'Войдите в свой аккаунт'}
+        </div>
+      </div>
+
+      <div id="auth-error" style="
+        display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.25);
+        border-radius:10px;padding:10px 14px;margin-bottom:14px;
+        color:#f87171;font-size:13px;text-align:center;
+      "></div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+        <input id="auth-username" type="text" autocomplete="username"
+          placeholder="Логин" style="
+          background:var(--surface);border:1px solid var(--border);
+          border-radius:12px;padding:13px 15px;
+          font-size:16px;color:var(--text);width:100%;outline:none;
+          font-family:inherit;
+        ">
+        <input id="auth-password" type="password" autocomplete="${mode === 'setup' ? 'new-password' : 'current-password'}"
+          placeholder="Пароль${mode === 'setup' ? ' (минимум 6 символов)' : ''}" style="
+          background:var(--surface);border:1px solid var(--border);
+          border-radius:12px;padding:13px 15px;
+          font-size:16px;color:var(--text);width:100%;outline:none;
+          font-family:inherit;
+        ">
+      </div>
+
+      <button id="auth-submit" style="
+        width:100%;padding:14px;border:none;border-radius:12px;
+        background:var(--accent);color:#fff;
+        font-size:16px;font-weight:700;cursor:pointer;
+        transition:opacity .15s;margin-bottom:12px;
+      ">
+        ${mode === 'setup' ? 'Создать аккаунт' : 'Войти'}
+      </button>
+
+      <div style="text-align:center">
+        <button id="auth-toggle" style="
+          background:none;border:none;color:var(--hint);
+          font-size:13px;cursor:pointer;text-decoration:underline;
+        ">
+          ${mode === 'setup' ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Создать'}
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function showAuthScreen(mode = 'login') {
+  // Убираем старый экран если есть
+  document.getElementById('auth-screen')?.remove();
+  document.body.insertAdjacentHTML('beforeend', buildAuthScreen(mode));
+
+  const submitBtn = document.getElementById('auth-submit');
+  const toggleBtn = document.getElementById('auth-toggle');
+  const errBox    = document.getElementById('auth-error');
+  const usernameI = document.getElementById('auth-username');
+  const passwordI = document.getElementById('auth-password');
+
+  function showErr(msg) {
+    errBox.textContent = msg;
+    errBox.style.display = 'block';
+  }
+
+  async function submit() {
+    const username = usernameI.value.trim();
+    const password = passwordI.value.trim();
+    if (!username || !password) { showErr('Заполните все поля'); return; }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '...';
+    errBox.style.display = 'none';
+
+    const fn   = mode === 'setup' ? authSetup : authLogin;
+    const data = await fn(username, password);
+
+    submitBtn.disabled = false;
+    submitBtn.textContent = mode === 'setup' ? 'Создать аккаунт' : 'Войти';
+
+    if (data.error) { showErr(data.error); return; }
+
+    // Успех — сохраняем токен и загружаем приложение
+    localAuth.token = data.token;
+    document.getElementById('auth-screen').remove();
+    await bootApp();
+  }
+
+  submitBtn.onclick = submit;
+  passwordI.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+
+  toggleBtn.onclick = () => showAuthScreen(mode === 'setup' ? 'login' : 'setup');
+
+  // Глобальный хук — вызывается из api.js при 401
+  window.__showAuthScreen = () => showAuthScreen('login');
+}
+
 // ─── BOOT ────────────────────────────────────────────────────
-(async () => {
+async function bootApp() {
   await loadAll();
   await renderTab('dashboard');
-
-  // Warm the cache for all other tabs while browser is idle
   if ('requestIdleCallback' in window) {
     requestIdleCallback(prefetchAll, { timeout: 2500 });
   } else {
     setTimeout(prefetchAll, 1500);
   }
+}
+
+(async () => {
+  // Всегда вешаем глобальный хук — на случай протухшего токена в середине сессии
+  window.__showAuthScreen = () => showAuthScreen('login');
+
+  const tgHasData = !!window.Telegram?.WebApp?.initData;
+
+  if (tgHasData) {
+    // Внутри Telegram — авторизация через initData, экран входа не нужен
+    await bootApp();
+    return;
+  }
+
+  if (localAuth.token) {
+    // Есть сохранённый токен — пробуем сразу загрузить
+    // api.js сам вызовет __showAuthScreen если 401
+    await bootApp();
+    return;
+  }
+
+  // Нет токена — смотрим, есть ли уже хоть один пользователь
+  const status = await authStatus().catch(() => ({ telegram: false, local_auth_configured: false }));
+
+  if (status.telegram && !tgHasData) {
+    // BOT_TOKEN настроен но открыто вне Telegram — показываем пояснение
+    showAuthScreen('login');
+    return;
+  }
+
+  // Показываем нужный экран
+  showAuthScreen(status.local_auth_configured ? 'login' : 'setup');
 })();
+
