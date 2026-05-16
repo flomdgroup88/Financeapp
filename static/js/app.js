@@ -416,7 +416,14 @@ function showAuthScreen(mode = 'login') {
 
     if (data.error) { showErr(data.error); return; }
 
-    // Успех — сохраняем токен и загружаем приложение
+    // Успех — показываем состояние загрузки прямо на экране входа
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Загружаем…';
+    errBox.style.display = 'none';
+    usernameI.disabled = true;
+    passwordI.disabled = true;
+
+    // Сохраняем токен и загружаем приложение
     localAuth.token = data.token;
     document.getElementById('auth-screen').remove();
     await bootApp();
@@ -433,8 +440,24 @@ function showAuthScreen(mode = 'login') {
 
 // ─── BOOT ────────────────────────────────────────────────────
 async function bootApp() {
+  // 1. Загружаем все базовые данные (один bootstrap-запрос)
   await loadAll();
+
+  // 2. Сразу скрываем сплэш — данные уже в памяти, дальше только рендер
+  const spl = document.getElementById('splash-screen');
+  if (spl) {
+    spl.classList.add('hidden');
+    setTimeout(() => spl.remove(), 450);
+  }
+
+  // 3. Рендерим дашборд (покажет скелетон мгновенно, данные догрузит фоном)
   await renderTab('dashboard');
+
+  // 4. Pre-render баланса и подписок — они рендерятся синхронно из S,
+  //    поэтому пользователь увидит готовый контент при первом переходе
+  renderTab('balance');
+  renderTab('subscriptions');
+
   if ('requestIdleCallback' in window) {
     requestIdleCallback(prefetchAll, { timeout: 2500 });
   } else {

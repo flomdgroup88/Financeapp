@@ -175,7 +175,13 @@ export const bustRecur = () => bust('/api/recurring', '/api/accounts', '/api/tra
 // ─── DATA LOADERS ───────────────────────────────────────────
 export async function loadAll() {
   // Один запрос вместо шести — экономим 5 RTT при каждом старте
+  const splSub = document.getElementById('spl-sub');
+  if (splSub) splSub.textContent = 'Загружаем данные…';
+
   const d = await GET('/api/bootstrap');
+
+  if (splSub) splSub.textContent = 'Готово ✓';
+
   S.accounts      = d.accounts       || [];
   S.usdRate       = parseFloat(d.usd_rate || 90);
   S.categories    = d.categories     || [];
