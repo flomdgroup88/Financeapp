@@ -59,7 +59,7 @@ limiter = Limiter(
     default_limits=["200 per minute"],   # глобальный лимит на все /api/ роуты
     storage_uri=_storage_uri,
     # Статику (js, css, иконки) и health-check не считаем в лимит
-    request_filter=lambda: not request.path.startswith("/api"),
+    default_limits_exempt_when=lambda: not request.path.startswith("/api"),
 )
 
 @app.errorhandler(429)
