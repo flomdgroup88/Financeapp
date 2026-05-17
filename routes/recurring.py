@@ -27,22 +27,6 @@ def calc_next_recurring_date(period, day_of_month=None, base_date=None):
             return today_dt.replace(year=today_dt.year + 1, day=28).isoformat()
     return (today_dt + timedelta(days=30)).isoformat()
 
-def calc_next_recurring_date(period, day_of_month=None, base_date=None):
-    today_dt = base_date or date.today()
-    if period == "daily":
-        return (today_dt + timedelta(days=1)).isoformat()
-    if period == "weekly":
-        return (today_dt + timedelta(days=7)).isoformat()
-    if period == "monthly":
-        bd = int(day_of_month or today_dt.day)
-        return calc_next_date_from_billing_day(bd, today_dt)
-    if period == "yearly":
-        try:
-            return today_dt.replace(year=today_dt.year + 1).isoformat()
-        except ValueError:
-            return today_dt.replace(year=today_dt.year + 1, day=28).isoformat()
-    return (today_dt + timedelta(days=30)).isoformat()
-
 
 @recurring_bp.route("/api/recurring", methods=["GET", "POST"])
 def recurring():
