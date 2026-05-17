@@ -12,6 +12,8 @@ Finance Telegram Mini App — Flask backend v3
 import os, logging, sqlite3, threading, time
 from flask import Flask, g, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import backup as bkp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -26,12 +28,27 @@ if ALLOWED_ORIGIN:
 else:
     CORS(app, origins=["http://localhost:5000", "http://127.0.0.1:5000"])
 
+# ── Rate limiting — защита от брутфорса ───────
+# По умолчанию лимиты не применяются глобально;
+# конкретные ограничения ставятся на каждый роут отдельно (см. auth.py).
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],          # без глобального лимита
+    storage_uri="memory://",    # in-process; для Railway с несколькими воркерами
+)                               # можно заменить на redis:// через env RATELIMIT_STORAGE_URI
+
+@app.errorhandler(429)
+def ratelimit_error(e):
+    return jsonify({"error": "Слишком много попыток. Подождите немного и попробуйте снова."}), 429
+
 from db import close_db, init_db, migrate_db, DB_PATH, qall, qone
 app.teardown_appcontext(close_db)
 
-from auth import authenticate, auth_bp
+from auth import authenticate, auth_bp, init_limiter
 app.before_request(authenticate)
 app.register_blueprint(auth_bp)
+init_limiter(limiter)   # передаём limiter в auth — он вешает лимиты на роуты
 
 
 from routes.static_files  import static_bp

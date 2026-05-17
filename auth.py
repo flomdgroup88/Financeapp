@@ -14,6 +14,18 @@ import os
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
 SESSION_DAYS = 30
 
+# limiter инициализируется позже через init_limiter(), чтобы избежать
+# циклического импорта (app.py импортирует auth.py, auth.py не должен импортировать app.py)
+_limiter = None
+
+def init_limiter(limiter):
+    """Вызывается из app.py после создания limiter'а."""
+    global _limiter
+    _limiter = limiter
+    # 5 попыток в минуту и 20 в час — на /api/auth/login и /api/auth/setup
+    for route_func in (api_auth_login, api_auth_setup):
+        limiter.limit("5 per minute; 20 per hour")(route_func)
+
 auth_bp = Blueprint("auth", __name__)
 
 # ──────────────────────────────────────────────
@@ -151,10 +163,33 @@ def authenticate():
 # ──────────────────────────────────────────────
 # Хелперы локального входа
 # ──────────────────────────────────────────────
+
+# Формат хэша: "v2:<salt_hex>:<dk_hex>"
+# Старые хэши без префикса — формат v1 (статичная соль), поддерживаются для входа,
+# но при следующем успешном логине автоматически обновляются до v2.
+
 def _hash_password(password: str) -> str:
-    salt = hashlib.sha256(b"finance-app-salt").digest()
+    """Создаёт новый хэш v2 с уникальной случайной солью."""
+    salt = secrets.token_bytes(32)
     dk   = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
-    return dk.hex()
+    return f"v2:{salt.hex()}:{dk.hex()}"
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """
+    Проверяет пароль против хэша любого формата.
+    v2: <salt_hex>:<dk_hex>  — новый формат (уникальная соль).
+    v1: просто hex           — старый формат (статичная соль), для обратной совместимости.
+    """
+    if stored_hash.startswith("v2:"):
+        _, salt_hex, dk_hex = stored_hash.split(":", 2)
+        salt = bytes.fromhex(salt_hex)
+        dk   = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
+        return hmac.compare_digest(dk.hex(), dk_hex)
+    else:
+        # v1 — старый хэш со статичной солью
+        old_salt = hashlib.sha256(b"finance-app-salt").digest()
+        old_dk   = hashlib.pbkdf2_hmac("sha256", password.encode(), old_salt, 260_000)
+        return hmac.compare_digest(old_dk.hex(), stored_hash)
 
 def _get_local_user(username: str):
     db  = sqlite3.connect(DB_PATH)
@@ -244,8 +279,19 @@ def api_auth_login():
     if not user:
         return jsonify({"error": "Неверный логин или пароль"}), 401
 
-    if not hmac.compare_digest(_hash_password(password), user["hash"]):
+    if not _verify_password(password, user["hash"]):
         return jsonify({"error": "Неверный логин или пароль"}), 401
+
+    # Автоматически обновляем старый v1-хэш до v2 при успешном входе
+    if not user["hash"].startswith("v2:"):
+        new_hash = _hash_password(password)
+        db = sqlite3.connect(DB_PATH)
+        db.execute(
+            "UPDATE settings SET value=? WHERE user_id=? AND key='local_password_hash'",
+            (new_hash, user["user_id"]),
+        )
+        db.commit()
+        db.close()
 
     token = _create_session(user["user_id"])
     return jsonify({"ok": True, "token": token, "user_id": user["user_id"]})
