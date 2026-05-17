@@ -56,15 +56,11 @@ else:
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=["200 per minute"],   # глобальный лимит на все роуты
+    default_limits=["200 per minute"],   # глобальный лимит на все /api/ роуты
     storage_uri=_storage_uri,
+    # Статику (js, css, иконки) и health-check не считаем в лимит
+    request_filter=lambda: not request.path.startswith("/api"),
 )
-
-# Статику и health-check не ограничиваем
-@app.before_request
-def _exempt_static_from_limiter():
-    if not request.path.startswith("/api"):
-        limiter.exempt(request)
 
 @app.errorhandler(429)
 def ratelimit_error(e):
@@ -92,17 +88,17 @@ from routes.stats         import stats_bp
 from routes.goals         import goals_bp
 from routes.recurring     import recurring_bp
 from routes.backup        import backup_bp
+from routes.export        import export_bp
 
 for bp in (
     static_bp, settings_bp, accounts_bp, transfers_bp,
     categories_bp, transactions_bp, budgets_bp, subscriptions_bp,
-    planned_bp, stats_bp, goals_bp, recurring_bp, backup_bp,
+    planned_bp, stats_bp, goals_bp, recurring_bp, backup_bp, export_bp,
 ):
     app.register_blueprint(bp)
 
 # ── Health check — Railway проверяет этот эндпоинт ────────────
 @app.route("/health")
-@limiter.exempt   # health-check не считается в лимит
 def health():
     return jsonify({"ok": True}), 200
 

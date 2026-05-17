@@ -99,9 +99,14 @@ def transactions():
     if amount <= 0:
         return jsonify({"error": "amount must be > 0"}), 400
 
-    count = qone("SELECT COUNT(*) AS v FROM transactions WHERE user_id=?", (uid(),))["v"]
-    if count >= 10000:
-        return jsonify({"error": "Достигнут лимит: не более 10 000 транзакций"}), 400
+    # Лимит задаётся через переменную окружения TX_LIMIT (по умолчанию 100 000).
+    # Поставьте TX_LIMIT=0 чтобы убрать лимит совсем.
+    import os as _os
+    _tx_limit = int(_os.environ.get("TX_LIMIT", 100_000))
+    if _tx_limit > 0:
+        count = qone("SELECT COUNT(*) AS v FROM transactions WHERE user_id=?", (uid(),))["v"]
+        if count >= _tx_limit:
+            return jsonify({"error": f"Достигнут лимит: не более {_tx_limit:,} транзакций на пользователя"}), 400
 
     q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
       (uid(), acc_id, cat_id, amount, tx_type, desc, tx_date))
