@@ -16,6 +16,9 @@ def categories():
         return jsonify({"categories": qall(
             "SELECT * FROM categories WHERE user_id=? ORDER BY sort_order, id", (uid(),))})
     d = request.get_json(force=True)
+    count = qone("SELECT COUNT(*) AS v FROM categories WHERE user_id=?", (uid(),))["v"]
+    if count >= 50:
+        return jsonify({"error": "Достигнут лимит: не более 50 категорий"}), 400
     q("INSERT INTO categories(user_id,name,icon,color) VALUES(?,?,?,?)",
       (uid(), d["name"], d.get("icon", "📦"), d.get("color", "#6366f1")))
     commit()

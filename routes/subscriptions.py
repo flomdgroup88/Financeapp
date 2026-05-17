@@ -17,6 +17,9 @@ def subscriptions():
         return jsonify({"subscriptions": qall(
             "SELECT * FROM subscriptions WHERE user_id=? ORDER BY is_active DESC, next_date", (uid(),))})
     d           = request.get_json(force=True)
+    count = qone("SELECT COUNT(*) AS v FROM subscriptions WHERE user_id=?", (uid(),))["v"]
+    if count >= 50:
+        return jsonify({"error": "Достигнут лимит: не более 50 подписок"}), 400
     billing_day = d.get("billing_day")
     next_date   = d.get("next_date")
     if d.get("period") == "monthly" and billing_day:

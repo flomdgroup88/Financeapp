@@ -33,6 +33,9 @@ def accounts():
         cfg  = qone("SELECT value FROM settings WHERE user_id=? AND key='usd_rate'", (uid(),))
         return jsonify({"accounts": rows, "usd_rate": float(cfg["value"]) if cfg else 90})
     d = request.get_json(force=True)
+    count = qone("SELECT COUNT(*) AS v FROM accounts WHERE user_id=?", (uid(),))["v"]
+    if count >= 20:
+        return jsonify({"error": "Достигнут лимит: не более 20 счетов"}), 400
     if d.get("is_priority"):
         q("UPDATE accounts SET is_priority=0 WHERE user_id=?", (uid(),))
     max_order = qone("SELECT COALESCE(MAX(sort_order),0) AS v FROM accounts WHERE user_id=?", (uid(),))["v"]

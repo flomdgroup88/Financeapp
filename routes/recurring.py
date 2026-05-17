@@ -43,6 +43,9 @@ def recurring():
     amount = float(d.get("amount", 0))
     if amount <= 0:
         return jsonify({"error": "amount > 0 required"}), 400
+    count = qone("SELECT COUNT(*) AS v FROM recurring_transactions WHERE user_id=?", (uid(),))["v"]
+    if count >= 50:
+        return jsonify({"error": "Достигнут лимит: не более 50 регулярных платежей"}), 400
     period       = d.get("period", "monthly")
     day_of_month = int(d.get("day_of_month") or 1) if period == "monthly" else None
     next_date    = calc_next_recurring_date(period, day_of_month)

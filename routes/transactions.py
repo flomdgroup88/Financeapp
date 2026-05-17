@@ -99,6 +99,10 @@ def transactions():
     if amount <= 0:
         return jsonify({"error": "amount must be > 0"}), 400
 
+    count = qone("SELECT COUNT(*) AS v FROM transactions WHERE user_id=?", (uid(),))["v"]
+    if count >= 10000:
+        return jsonify({"error": "Достигнут лимит: не более 10 000 транзакций"}), 400
+
     q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
       (uid(), acc_id, cat_id, amount, tx_type, desc, tx_date))
 

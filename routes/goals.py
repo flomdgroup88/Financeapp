@@ -16,6 +16,9 @@ def goals():
         return jsonify({"goals": qall(
             "SELECT * FROM savings_goals WHERE user_id=? ORDER BY created_at", (uid(),))})
     d = request.get_json(force=True)
+    count = qone("SELECT COUNT(*) AS v FROM savings_goals WHERE user_id=?", (uid(),))["v"]
+    if count >= 20:
+        return jsonify({"error": "Достигнут лимит: не более 20 целей"}), 400
     target = float(d.get("target_amount", 0))
     if target <= 0:
         return jsonify({"error": "target_amount must be > 0"}), 400
