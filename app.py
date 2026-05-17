@@ -10,7 +10,7 @@ Finance Telegram Mini App — Flask backend v3
 """
 
 import os, logging, sqlite3, threading, time
-from flask import Flask, g, jsonify
+from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -28,19 +28,47 @@ if ALLOWED_ORIGIN:
 else:
     CORS(app, origins=["http://localhost:5000", "http://127.0.0.1:5000"])
 
-# ── Rate limiting — защита от брутфорса ───────
-# По умолчанию лимиты не применяются глобально;
-# конкретные ограничения ставятся на каждый роут отдельно (см. auth.py).
+# ── Rate limiting ─────────────────────────────────────────────────────────────
+#
+# Хранилище счётчиков:
+#   • Если задана переменная REDIS_URL — используем Redis.
+#     Redis работает корректно при любом количестве воркеров Gunicorn.
+#     На Railway: добавить плагин Redis → он сам пропишет REDIS_URL.
+#   • Если Redis нет — fallback на memory://.
+#     В этом случае Gunicorn нужно запускать с одним воркером:
+#       gunicorn app:app --workers 1
+#     (или добавить --preload, тогда память не делится между форками,
+#     но лимиты всё равно будут независимы на каждый воркер)
+#
+# Глобальный лимит 200 запросов в минуту на IP применяется ко всем /api/ роутам.
+# Авторизационные роуты имеют дополнительный жёсткий лимит — см. auth.py.
+#
+_redis_url = os.environ.get("REDIS_URL", "")
+_storage_uri = _redis_url if _redis_url else "memory://"
+
+if _redis_url:
+    logging.info("⚡ Rate limiter: Redis (%s)", _redis_url.split("@")[-1])  # скрываем пароль в логе
+else:
+    logging.warning(
+        "⚠️  Rate limiter: memory:// (задайте REDIS_URL для нескольких воркеров Gunicorn)"
+    )
+
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=[],          # без глобального лимита
-    storage_uri="memory://",    # in-process; для Railway с несколькими воркерами
-)                               # можно заменить на redis:// через env RATELIMIT_STORAGE_URI
+    default_limits=["200 per minute"],   # глобальный лимит на все роуты
+    storage_uri=_storage_uri,
+)
+
+# Статику и health-check не ограничиваем
+@app.before_request
+def _exempt_static_from_limiter():
+    if not request.path.startswith("/api"):
+        limiter.exempt(request)
 
 @app.errorhandler(429)
 def ratelimit_error(e):
-    return jsonify({"error": "Слишком много попыток. Подождите немного и попробуйте снова."}), 429
+    return jsonify({"error": "Слишком много запросов. Подождите немного и попробуйте снова."}), 429
 
 from db import close_db, init_db, migrate_db, DB_PATH, qall, qone
 app.teardown_appcontext(close_db)
@@ -48,7 +76,7 @@ app.teardown_appcontext(close_db)
 from auth import authenticate, auth_bp, init_limiter
 app.before_request(authenticate)
 app.register_blueprint(auth_bp)
-init_limiter(limiter)   # передаём limiter в auth — он вешает лимиты на роуты
+init_limiter(limiter)   # передаём limiter в auth — он вешает жёсткие лимиты на /login и /setup
 
 
 from routes.static_files  import static_bp
@@ -74,6 +102,7 @@ for bp in (
 
 # ── Health check — Railway проверяет этот эндпоинт ────────────
 @app.route("/health")
+@limiter.exempt   # health-check не считается в лимит
 def health():
     return jsonify({"ok": True}), 200
 
@@ -108,8 +137,6 @@ def _startup():
     threading.Thread(target=_cleanup_sessions, daemon=True, name="session-cleanup").start()
     bkp.init(DB_PATH)
 
-# Запускаем сразу — с --preload это выполнится до форка воркеров,
-# а без него — при первом импорте модуля (что тоже ок).
 _startup()
 
 if __name__ == "__main__":
