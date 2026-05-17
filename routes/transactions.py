@@ -26,8 +26,8 @@ def transactions():
             clauses.append("LOWER(t.description) LIKE ?")
             params.append(f"%{request.args['search'].strip().lower()}%")
         where  = "WHERE " + " AND ".join(clauses)
-        limit  = int(request.args.get("limit", 50))
-        offset = int(request.args.get("offset", 0))
+        limit  = max(1, min(int(request.args.get("limit", 50)), 500))   # не больше 500
+        offset = max(0, int(request.args.get("offset", 0)))
 
         # Сортировка — белый список полей, чтобы исключить SQL-инъекцию
         SORT_COLS = {"date": "t.date", "amount": "t.amount", "type": "t.type"}
