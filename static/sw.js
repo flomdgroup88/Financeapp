@@ -1,7 +1,7 @@
-// sw.js — сервис-воркер для PWA-режима
-// v4: офлайн-поддержка — кэш оболочки + кэш bootstrap-данных
+// sw.js — Service Worker для PWA
+// v5: полная офлайн-поддержка — кэш оболочки + API-данных + транзакций
 
-const CACHE = 'finance-shell-v4';
+const CACHE = 'finance-shell-v5';
 const SHELL = [
   '/',
   '/static/app-bundle.min.js',
@@ -13,7 +13,7 @@ const SHELL = [
   'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js',
 ];
 
-// Установка — кэшируем оболочку
+// ── Установка: кэшируем оболочку ──────────────────────────────
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE)
@@ -22,7 +22,7 @@ self.addEventListener('install', e => {
   );
 });
 
-// Активация — удаляем старые кэши
+// ── Активация: удаляем старые кэши ────────────────────────────
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
@@ -31,36 +31,64 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch — стратегия по типу запроса
-self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
+// ── Хелпер: безопасный fetch с таймаутом ──────────────────────
+function fetchWithTimeout(request, ms = 8000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    fetch(request)
+      .then(r => { clearTimeout(timer); resolve(r); })
+      .catch(e => { clearTimeout(timer); reject(e); });
+  });
+}
 
-  // /api/bootstrap — Network-first с кэш-фоллбэком для офлайн-доступа
-  if (url.pathname === '/api/bootstrap' && e.request.method === 'GET') {
-    e.respondWith(
-      fetch(e.request).then(res => {
+// ── Стратегия: Network-first с кэш-фоллбэком ──────────────────
+function networkFirstWithCache(event, cacheName) {
+  event.respondWith(
+    fetchWithTimeout(event.request)
+      .then(res => {
         if (res.status === 200) {
           const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
+          caches.open(cacheName).then(c => c.put(event.request, clone));
         }
         return res;
-      }).catch(() =>
-        caches.match(e.request).then(cached =>
+      })
+      .catch(() =>
+        caches.match(event.request).then(cached =>
           cached || new Response(JSON.stringify({}), {
             status: 503,
             headers: { 'Content-Type': 'application/json' },
           })
         )
       )
-    );
+  );
+}
+
+// ── Fetch handler ──────────────────────────────────────────────
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+
+  // Bootstrap и stats — Network-first с долгосрочным кэшем для офлайна
+  if (e.request.method === 'GET' && (
+    url.pathname === '/api/bootstrap' ||
+    url.pathname === '/api/stats'     ||
+    url.pathname.startsWith('/api/accounts')
+  )) {
+    networkFirstWithCache(e, CACHE);
     return;
   }
 
-  // Остальные API-запросы — только сеть, при ошибке возвращаем пустой JSON
+  // История транзакций — Network-first с кэшем (основа офлайн-истории)
+  if (e.request.method === 'GET' && url.pathname === '/api/transactions') {
+    networkFirstWithCache(e, CACHE);
+    return;
+  }
+
+  // Мутирующие API-запросы (POST/PUT/DELETE) — только сеть
+  // Офлайн-случай обрабатывается на уровне JS-очереди в api.js
   if (url.pathname.startsWith('/api/')) {
     e.respondWith(
       fetch(e.request).catch(() =>
-        new Response(JSON.stringify({}), {
+        new Response(JSON.stringify({ ok: false, offline: true }), {
           status: 503,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -69,7 +97,7 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Статика — сначала кэш, при промахе — сеть + кэшируем
+  // Статика — Cache-first, при промахе сеть + кэшируем
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;

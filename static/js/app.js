@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx, authLogin, authSetup, authLogout, authStatus, localAuth, flushTxQueue, getTxQueue } from './api.js';
+import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx, authLogin, authSetup, authLogout, authStatus, localAuth, flushTxQueue, getOpQueue, getTxQueue } from './api.js';
 import { getCached } from './cache.js';
 import { handlePickerClick, renderIconPicker, renderColorPicker } from './pickers.js';
 import { ICONS_GOAL, ICONS_RECUR } from './config.js';
@@ -694,7 +694,7 @@ function showAuthScreen(mode = 'login') {
 // ─── OFFLINE BANNER ──────────────────────────────────────────
 function showOfflineBanner() {
   if (document.getElementById('offline-banner')) return;
-  const pending = getTxQueue().length;
+  const pending = getOpQueue().length;
   const banner = document.createElement('div');
   banner.id = 'offline-banner';
   banner.innerHTML = `
@@ -744,13 +744,13 @@ function hideOfflineBanner() {
 window.addEventListener('online', async () => {
   hideOfflineBanner();
 
-  // Сначала отправляем очередь офлайн-транзакций
-  const pending = getTxQueue().length;
+  // ── Синхронизируем всю очередь отложенных операций ──────
+  const pending = getOpQueue().length;
   if (pending > 0) {
     const synced = await flushTxQueue();
     if (synced > 0) {
       const toast = document.createElement('div');
-      toast.textContent = `✅ Синхронизировано транзакций: ${synced}`;
+      toast.textContent = `✅ Синхронизировано: ${synced} операций`;
       Object.assign(toast.style, {
         position:'fixed', bottom:'80px', left:'50%', transform:'translateX(-50%)',
         background:'#10b981', color:'#fff', padding:'10px 18px',
@@ -763,8 +763,19 @@ window.addEventListener('online', async () => {
     }
   }
 
-  // Перезагружаем страницу чтобы получить свежие данные
-  location.reload();
+  // ── Мягкое обновление данных без перезагрузки страницы ──
+  // Восстанавливаем данные с сервера и перерисовываем текущую вкладку
+  try {
+    S._offline = false;
+    await loadAll();
+    // Сбрасываем TAB TTL чтобы форсировать перерендер
+    Object.keys(tabLastRender).forEach(k => { tabLastRender[k] = 0; });
+    await renderTab(S.tab);
+  } catch (e) {
+    console.warn('online reload failed', e);
+    // Если мягкое обновление не сработало — тогда уже перезагружаем
+    location.reload();
+  }
 });
 window.addEventListener('offline', () => {
   if (!S._offline) showOfflineBanner();

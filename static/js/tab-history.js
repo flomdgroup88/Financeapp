@@ -1,5 +1,5 @@
 import { S, fmtRub } from './state.js';
-import { GET, haptic } from './api.js';
+import { GET, haptic, cacheHistoryResponse, getCachedHistoryResponse } from './api.js';
 import { renderCatRowClickable, renderTxList } from './components.js';
 
 // ─── HISTORY ────────────────────────────────────────────────
@@ -99,12 +99,47 @@ export async function loadHistoryData() {
     res.innerHTML = '<div class="hist-loading">Загрузка...</div>';
   }
 
-  let url = `/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=${LIMIT}&offset=${S.histOffset}&sort_by=${S.histSortBy}&sort_dir=${S.histSortDir}`;
-  if (S.histSearch && S.histSearch.trim()) url += `&search=${encodeURIComponent(S.histSearch.trim())}`;
+  const url = `/api/transactions?start_date=${S.histStart}&end_date=${S.histEnd}&limit=${LIMIT}&offset=${S.histOffset}&sort_by=${S.histSortBy}&sort_dir=${S.histSortDir}` +
+    (S.histSearch?.trim() ? `&search=${encodeURIComponent(S.histSearch.trim())}` : '');
 
-  const data   = await GET(url);
-  const newTxs = data.transactions || [];
-  const stats  = data.stats || {};
+  // ── Офлайн-поддержка истории ──────────────────────────────
+  // Кэшируем ответы по ключу URL (только первые страницы без пагинации)
+  const cacheKey = url;
+  let data;
+  let fromCache = false;
+
+  if (!navigator.onLine) {
+    // Офлайн: сразу берём из кэша
+    const cached = getCachedHistoryResponse(cacheKey);
+    if (cached) {
+      data = cached;
+      fromCache = true;
+    } else {
+      // Кэша нет — показываем понятное сообщение
+      res.innerHTML = `
+        <div class="empty">
+          <div class="empty-ico">📵</div>
+          <div class="empty-text">История недоступна офлайн</div>
+          <div style="font-size:13px;color:var(--c-sub);margin-top:6px">
+            Откройте этот период онлайн хотя бы раз
+          </div>
+        </div>`;
+      return;
+    }
+  } else {
+    // Онлайн: загружаем с сервера, сохраняем в кэш
+    data = await GET(url);
+    if (data && (data.transactions || data.stats)) {
+      cacheHistoryResponse(cacheKey, data);
+    } else if (!data || (!data.transactions && !data.stats)) {
+      // Сервер вернул пустоту — пробуем кэш как запасной вариант
+      const cached = getCachedHistoryResponse(cacheKey);
+      if (cached) { data = cached; fromCache = true; }
+    }
+  }
+
+  const newTxs = data?.transactions || [];
+  const stats  = data?.stats        || {};
 
   if (S.histOffset === 0) S.histTxs = [];
   S.histTxs = (S.histTxs || []).concat(newTxs);
@@ -114,18 +149,23 @@ export async function loadHistoryData() {
     return;
   }
 
-  const totExp  = stats.total_expense || 0;
-  const totInc  = stats.total_income  || 0;
-  const totCount = stats.total_count  || 0;
-  const topCats = stats.top_categories || [];
-
-  const hasMore     = newTxs.length === LIMIT;
+  const totExp   = stats.total_expense   || 0;
+  const totInc   = stats.total_income    || 0;
+  const totCount = stats.total_count     || 0;
+  const topCats  = stats.top_categories  || [];
+  const hasMore  = newTxs.length === LIMIT;
   const loadedCount = S.histTxs.length;
+
   const loadMoreBtn = hasMore
     ? `<button class="btn btn-secondary" id="btn-hist-more" style="margin:12px auto;display:block">Загрузить ещё (показано ${loadedCount} из ${totCount})</button>`
     : '';
 
+  const cacheNote = fromCache
+    ? `<div style="font-size:11px;color:var(--c-sub);text-align:center;margin-bottom:6px">📵 Кэшированные данные</div>`
+    : '';
+
   res.innerHTML = `
+    ${cacheNote}
     <div class="grid2" style="margin-bottom:10px">
       <div class="card"><div class="card-title">Траты</div><div class="hist-stat-val--red">${fmtRub(totExp)}</div></div>
       <div class="card"><div class="card-title">Доходы</div><div class="hist-stat-val--green">${fmtRub(totInc)}</div></div>
