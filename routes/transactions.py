@@ -108,15 +108,17 @@ def transactions():
         if count >= _tx_limit:
             return jsonify({"error": f"Достигнут лимит: не более {_tx_limit:,} транзакций на пользователя"}), 400
 
-    q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
+    cur = q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,?,?,?,?,?)",
       (uid(), acc_id, cat_id, amount, tx_type, desc, tx_date))
+
+    new_id = cur.lastrowid
 
     if acc_id:
         delta = -amount if tx_type == "expense" else amount
         q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?", (delta, acc_id, uid()))
 
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": new_id})
 
 
 @transactions_bp.route("/api/transactions/<int:tid>", methods=["GET", "DELETE", "PUT"])

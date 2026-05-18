@@ -1,5 +1,17 @@
+/**
+ * api.js — HTTP-клиент + офлайн/IDB слой
+ *
+ * Изменения v2:
+ *   - bootstrap и история хранятся в IndexedDB (offlineGet/offlineSet)
+ *   - очередь операций хранится в IndexedDB (queuePush/queueGetAll/queueDelete)
+ *   - кэш GET живёт в IDB через cache.js
+ *   - при старте прогреваем memory-кэш из IDB чтобы первый рендер был мгновенным
+ *   - убран localStorage (кроме сессионного токена — он должен быть строковым)
+ */
+
 import { S } from './state.js';
-import { getCached, setCached, invalidate } from './cache.js';
+import { getCached, getCachedSync, setCached, invalidate } from './cache.js';
+import { offlineGet, offlineSet, offlinePatch, queuePush, queueGetAll, queueDelete } from './idb.js';
 
 // ─── TELEGRAM ───────────────────────────────────────────────
 export const tg     = window.Telegram?.WebApp;
@@ -40,7 +52,6 @@ export const localAuth = {
 
 // ─── TOAST HELPER ───────────────────────────────────────────
 function showErrorToast(msg) {
-  // Не показываем «Нет связи» если уже виден офлайн-баннер или устройство офлайн
   if (!navigator.onLine || document.getElementById('offline-banner')) return;
   const t = document.createElement('div');
   t.textContent = '⚠️ ' + msg;
@@ -104,20 +115,44 @@ export async function authStatus() {
 }
 
 // ─── CACHED GET (Stale-While-Revalidate) ────────────────────
-// _swr: map debounceKey → timer — prevents cascade renders when
-// multiple GETC calls share the same onUpdate callback.
 const _swrTimers = new Map();
 
 export async function GETC(path, onUpdate, debounceKey) {
-  const cached = getCached(path);
+  // Сначала пробуем синхронно из памяти — рендерим мгновенно
+  const memHit = getCachedSync(path);
+  if (memHit !== null) {
+    // Фоновое обновление с сервера
+    GET(path).then(fresh => {
+      if (!fresh || !Object.keys(fresh).length) return;
+      const freshStr = JSON.stringify(fresh);
+      if (freshStr !== JSON.stringify(memHit)) {
+        setCached(path, fresh);
+        if (onUpdate) {
+          if (debounceKey) {
+            clearTimeout(_swrTimers.get(debounceKey));
+            _swrTimers.set(debounceKey, setTimeout(() => {
+              _swrTimers.delete(debounceKey);
+              onUpdate(fresh);
+            }, 80));
+          } else {
+            onUpdate(fresh);
+          }
+        }
+      }
+    }).catch(() => {});
+    return memHit;
+  }
+
+  // Промах в памяти — пробуем IDB (после перезагрузки)
+  const cached = await getCached(path);
   if (cached !== null) {
     GET(path).then(fresh => {
+      if (!fresh || !Object.keys(fresh).length) return;
       const freshStr = JSON.stringify(fresh);
       if (freshStr !== JSON.stringify(cached)) {
         setCached(path, fresh);
         if (onUpdate) {
           if (debounceKey) {
-            // Collapse multiple concurrent callbacks into one render
             clearTimeout(_swrTimers.get(debounceKey));
             _swrTimers.set(debounceKey, setTimeout(() => {
               _swrTimers.delete(debounceKey);
@@ -131,8 +166,10 @@ export async function GETC(path, onUpdate, debounceKey) {
     }).catch(() => {});
     return cached;
   }
+
+  // Ничего нет — запрашиваем с сервера
   const data = await GET(path);
-  setCached(path, data);
+  if (data && Object.keys(data).length) setCached(path, data);
   return data;
 }
 
@@ -144,104 +181,70 @@ export const bustSub   = () => bust('/api/subscriptions', '/api/accounts');
 export const bustGoals = () => bust('/api/goals', '/api/accounts');
 export const bustRecur = () => bust('/api/recurring', '/api/accounts', '/api/transactions', '/api/stats');
 
-// ─── DATA LOADERS ───────────────────────────────────────────
-const OFFLINE_CACHE_KEY = 'fin_offline_bootstrap';
+// ─── BOOTSTRAP (офлайн через IDB) ───────────────────────────
+const BOOTSTRAP_KEY = 'bootstrap';
+const HIST_KEY_PREFIX = 'hist:';
 
-function persistBootstrap(d) { try { localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(d)); } catch {} }
-function loadCachedBootstrap() { try { const r = localStorage.getItem(OFFLINE_CACHE_KEY); return r ? JSON.parse(r) : null; } catch { return null; } }
-
-// ─── КЭШ ИСТОРИИ ТРАНЗАКЦИЙ (для офлайн-доступа) ────────────
-const HIST_CACHE_KEY = 'fin_hist_cache';
-const HIST_CACHE_MAX = 15;    // максимум записей
-const HIST_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
-
-export function cacheHistoryResponse(urlKey, data) {
-  try {
-    let cache = {};
-    try { cache = JSON.parse(localStorage.getItem(HIST_CACHE_KEY) || '{}'); } catch {}
-    // Удаляем старые записи если превышен лимит
-    const keys = Object.keys(cache);
-    if (keys.length >= HIST_CACHE_MAX) {
-      const oldest = keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0))[0];
-      delete cache[oldest];
-    }
-    cache[urlKey] = { data, ts: Date.now() };
-    localStorage.setItem(HIST_CACHE_KEY, JSON.stringify(cache));
-  } catch {}
+export async function cacheHistoryResponse(urlKey, data) {
+  await offlineSet(HIST_KEY_PREFIX + urlKey, data);
 }
 
-export function getCachedHistoryResponse(urlKey) {
-  try {
-    const cache = JSON.parse(localStorage.getItem(HIST_CACHE_KEY) || '{}');
-    const entry = cache[urlKey];
-    if (!entry) return null;
-    if (Date.now() - entry.ts > HIST_CACHE_TTL) return null;
-    return entry.data;
-  } catch { return null; }
+export async function getCachedHistoryResponse(urlKey) {
+  return offlineGet(HIST_KEY_PREFIX + urlKey);
 }
 
-// ─── ОФЛАЙН-ОЧЕРЕДЬ ОПЕРАЦИЙ ─────────────────────────────────
-// Хранит все мутирующие операции: POST, PUT, DELETE
-// Формат: { method, path, body, ts, id }
-
-const OP_QUEUE_KEY = 'fin_op_queue';
-
-export function getOpQueue() {
-  try { return JSON.parse(localStorage.getItem(OP_QUEUE_KEY) || '[]'); } catch { return []; }
+// ─── ОЧЕРЕДЬ ОПЕРАЦИЙ (через IDB) ────────────────────────────
+export async function enqueueOp(method, path, body = null) {
+  await queuePush({ method, path, body, id: Math.random().toString(36).slice(2) });
 }
 
-function saveOpQueue(q) { try { localStorage.setItem(OP_QUEUE_KEY, JSON.stringify(q)); } catch {} }
+export function enqueueTx(body) { return enqueueOp('POST', '/api/transactions', body); }
 
-// Добавить операцию в очередь
-export function enqueueOp(method, path, body = null) {
-  const q = getOpQueue();
-  q.push({ method, path, body, ts: Date.now(), id: Math.random().toString(36).slice(2) });
-  saveOpQueue(q);
+export async function getTxQueue() {
+  const all = await queueGetAll();
+  return all.filter(op => op.method === 'POST' && op.path === '/api/transactions');
 }
 
-// Обратная совместимость: enqueueTx / getTxQueue
-export function enqueueTx(body) { enqueueOp('POST', '/api/transactions', body); }
-export function getTxQueue()    { return getOpQueue().filter(op => op.method === 'POST' && op.path === '/api/transactions'); }
+export async function getOpQueue() {
+  return queueGetAll();
+}
 
-// Обновить баланс в офлайн-кэше
-export function patchOfflineBalance(accId, delta) {
-  try {
-    const raw = localStorage.getItem(OFFLINE_CACHE_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
+// Обновить баланс в офлайн-кэше (IDB)
+export async function patchOfflineBalance(accId, delta) {
+  await offlinePatch(BOOTSTRAP_KEY, data => {
     const acc = (data.accounts || []).find(a => a.id === accId);
-    if (acc) { acc.balance += delta; localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(data)); }
-  } catch {}
+    if (acc) acc.balance += delta;
+    return data;
+  });
 }
 
-// Отправить всю очередь операций на сервер
+// Отправить всю очередь на сервер
 export async function flushTxQueue() {
-  const q = getOpQueue();
-  if (!q.length) return 0;
+  const queue = await queueGetAll();
+  if (!queue.length) return 0;
 
   const headers = { 'Content-Type': 'application/json' };
   if (TG_INIT_DATA)    headers['X-Telegram-Init-Data'] = TG_INIT_DATA;
   if (localAuth.token) headers['X-Session-Token']       = localAuth.token;
 
-  const failed = [];
   let synced = 0;
-
-  for (const item of q) {
+  for (const item of queue) {
     try {
       const r = await fetch(API + item.path, {
         method:  item.method,
         headers,
-        body:    item.body ? JSON.stringify(item.body) : undefined,
+        body: item.body ? JSON.stringify(item.body) : undefined,
       });
-      if (r.ok || r.status === 201 || r.status === 204) synced++;
-      else failed.push(item);
-    } catch { failed.push(item); }
+      if (r.ok || r.status === 201 || r.status === 204) {
+        await queueDelete(item.id);
+        synced++;
+      }
+    } catch { /* оставляем в очереди */ }
   }
-
-  saveOpQueue(failed);
   return synced;
 }
 
+// ─── LOAD ALL (с IDB-офлайном) ───────────────────────────────
 export async function loadAll() {
   const splSub = document.getElementById('spl-sub');
   if (splSub) splSub.textContent = 'Загружаем данные…';
@@ -251,9 +254,11 @@ export async function loadAll() {
   try {
     d = await GET('/api/bootstrap');
     if (!d || (!d.accounts && !d.categories)) throw new Error('empty bootstrap');
-    persistBootstrap(d);
+    await offlineSet(BOOTSTRAP_KEY, d);
+    // Прогреваем memory-кэш из свежих данных для мгновенных рендеров
+    _warmMemoryCache(d);
   } catch {
-    const cached = loadCachedBootstrap();
+    const cached = await offlineGet(BOOTSTRAP_KEY);
     if (cached) {
       d = cached;
       S._offline = true;
@@ -273,8 +278,22 @@ export async function loadAll() {
   S.planned       = d.planned_income || [];
   S.goals         = d.goals          || [];
   S.recurring     = d.recurring      || [];
+
   const usdEl = document.getElementById('cfg-usd');
   if (usdEl) usdEl.value = S.usdRate;
+}
+
+// Прогрев in-memory кэша — чтобы первый рендер каждого таба был мгновенным
+function _warmMemoryCache(bootstrap) {
+  if (bootstrap.accounts) {
+    setCached('/api/accounts', { accounts: bootstrap.accounts, usd_rate: bootstrap.usd_rate });
+  }
+  if (bootstrap.categories) {
+    setCached('/api/categories', { categories: bootstrap.categories });
+  }
+  if (bootstrap.subscriptions) {
+    setCached('/api/subscriptions', { subscriptions: bootstrap.subscriptions });
+  }
 }
 
 export async function reloadAccounts() {
