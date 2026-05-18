@@ -693,20 +693,83 @@ function showAuthScreen(mode = 'login') {
   window.__showAuthScreen = () => showAuthScreen('login');
 }
 
+// ─── OFFLINE BANNER ──────────────────────────────────────────
+function showOfflineBanner() {
+  if (document.getElementById('offline-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'offline-banner';
+  banner.innerHTML = `
+    <span>📵 Офлайн — данные могут быть устаревшими</span>
+    <button onclick="location.reload()" id="offline-retry-btn">Обновить</button>
+  `;
+  Object.assign(banner.style, {
+    position: 'fixed',
+    top: '0',
+    left: '0',
+    right: '0',
+    background: '#92400e',
+    color: '#fef3c7',
+    padding: '8px 16px',
+    fontSize: '13px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    zIndex: '9998',
+    boxShadow: '0 2px 8px rgba(0,0,0,.3)',
+  });
+  const btn = banner.querySelector('#offline-retry-btn');
+  Object.assign(btn.style, {
+    padding: '4px 14px',
+    borderRadius: '16px',
+    border: 'none',
+    background: '#fef3c7',
+    color: '#92400e',
+    fontSize: '12px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    flexShrink: '0',
+  });
+  document.body.prepend(banner);
+  // Сдвигаем контент вниз, чтобы баннер не перекрывал шапку
+  document.documentElement.style.setProperty('--offline-banner-h', '37px');
+}
+
+function hideOfflineBanner() {
+  const b = document.getElementById('offline-banner');
+  if (b) b.remove();
+  document.documentElement.style.removeProperty('--offline-banner-h');
+}
+
+// Слушаем события сети
+window.addEventListener('online', () => {
+  if (S._offline) {
+    // Сеть вернулась — перезагружаемся, чтобы получить свежие данные
+    hideOfflineBanner();
+    location.reload();
+  }
+});
+window.addEventListener('offline', () => {
+  if (!S._offline) showOfflineBanner();
+});
+
 // ─── BOOT ────────────────────────────────────────────────────
 async function bootApp() {
-  // 1. Загружаем все базовые данные (один bootstrap-запрос)
+  // 1. Загружаем все базовые данные (один bootstrap-запрос или офлайн-кэш)
   try {
     await loadAll();
   } catch (err) {
     console.error('bootApp: loadAll failed', err);
-    // Show error toast
+    // Нет данных даже в офлайн-кэше
     const t = document.createElement('div');
-    t.innerHTML = '❌ Не удалось загрузить данные. <button onclick="location.reload()" style="margin-left:8px;padding:4px 14px;border-radius:16px;border:none;background:#fff;color:#ef4444;font-size:13px;cursor:pointer">Повторить</button>';
+    t.innerHTML = '❌ Нет данных. Подключитесь к сети. <button onclick="location.reload()" style="margin-left:8px;padding:4px 14px;border-radius:16px;border:none;background:#fff;color:#ef4444;font-size:13px;cursor:pointer">Повторить</button>';
     Object.assign(t.style, {position:'fixed',bottom:'80px',left:'50%',transform:'translateX(-50%)',background:'#ef4444',color:'#fff',padding:'10px 18px',borderRadius:'12px',fontSize:'13px',zIndex:'9999',boxShadow:'0 4px 12px rgba(0,0,0,.3)',textAlign:'center',whiteSpace:'nowrap'});
     document.body.appendChild(t);
     return;
   }
+
+  // Показываем баннер офлайн-режима, если данные взяты из кэша
+  if (S._offline) showOfflineBanner();
 
   // 2. Рендерим дашборд через renderTab (корректно ставит активную вкладку)
   await renderTab('dashboard');

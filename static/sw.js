@@ -1,8 +1,7 @@
 // sw.js — сервис-воркер для PWA-режима
-// Кэширует оболочку приложения, API-запросы всегда идут в сеть
+// v4: офлайн-поддержка — кэш оболочки + кэш bootstrap-данных
 
-// Версию меняем при каждом деплое — это сбрасывает старый кэш у пользователей
-const CACHE = 'finance-shell-v3';
+const CACHE = 'finance-shell-v4';
 const SHELL = [
   '/',
   '/static/app-bundle.min.js',
@@ -32,28 +31,55 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Fetch — стратегия: API всегда в сеть, остальное из кэша
+// Fetch — стратегия по типу запроса
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // API-запросы — только сеть (никогда не кэшируем данные)
-  if (url.pathname.startsWith('/api/')) {
-    e.respondWith(fetch(e.request));
+  // /api/bootstrap — Network-first с кэш-фоллбэком для офлайн-доступа
+  if (url.pathname === '/api/bootstrap' && e.request.method === 'GET') {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.status === 200) {
+          const clone = res.clone();
+          caches.open(CACHE).then(c => c.put(e.request, clone));
+        }
+        return res;
+      }).catch(() =>
+        caches.match(e.request).then(cached =>
+          cached || new Response(JSON.stringify({}), {
+            status: 503,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        )
+      )
+    );
     return;
   }
 
-  // Всё остальное — сначала кэш, при промахе — сеть, потом кэшируем
+  // Остальные API-запросы — только сеть, при ошибке возвращаем пустой JSON
+  if (url.pathname.startsWith('/api/')) {
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        new Response(JSON.stringify({}), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    );
+    return;
+  }
+
+  // Статика — сначала кэш, при промахе — сеть + кэшируем
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
       return fetch(e.request).then(res => {
-        // Кэшируем только успешные GET-ответы
         if (e.request.method === 'GET' && res.status === 200) {
           const clone = res.clone();
           caches.open(CACHE).then(c => c.put(e.request, clone));
         }
         return res;
-      }).catch(() => caches.match('/'));  // Оффлайн — возвращаем главную
+      }).catch(() => caches.match('/'));
     })
   );
 });

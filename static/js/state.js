@@ -1,6 +1,7 @@
 // ─── STATE ──────────────────────────────────────────────────
 export const S = {
   tab: 'dashboard',
+  _offline: false,   // true когда загружены данные из офлайн-кэша
   accounts: [], categories: [], subscriptions: [], planned: [], goals: [], recurring: [],
   usdRate: 90,
   expYear:  new Date().getFullYear(),

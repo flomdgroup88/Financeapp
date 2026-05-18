@@ -14,6 +14,7 @@
   --nav-h:62px;--hdr-h:52px;
   --safe-t:env(safe-area-inset-top,44px);
   --safe-b:env(safe-area-inset-bottom,0px);
+  --offline-banner-h:0px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}
@@ -363,6 +364,7 @@ oot {
   --nav-h:62px;--hdr-h:52px;
   --safe-t:env(safe-area-inset-top,44px);
   --safe-b:env(safe-area-inset-bottom,0px);
+  --offline-banner-h:0px;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px}

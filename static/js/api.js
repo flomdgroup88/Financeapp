@@ -178,20 +178,50 @@ export const bustGoals = () => bust('/api/goals', '/api/accounts');
 export const bustRecur = () => bust('/api/recurring', '/api/accounts', '/api/transactions', '/api/stats');
 
 // ─── DATA LOADERS ───────────────────────────────────────────
+const OFFLINE_CACHE_KEY = 'fin_offline_bootstrap';
+
+// Сохраняем bootstrap-данные в localStorage для офлайн-доступа
+function persistBootstrap(d) {
+  try { localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(d)); } catch {}
+}
+
+// Загружаем сохранённый bootstrap из localStorage
+function loadCachedBootstrap() {
+  try {
+    const raw = localStorage.getItem(OFFLINE_CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export async function loadAll() {
   // Один запрос вместо шести — экономим 5 RTT при каждом старте
   const splSub = document.getElementById('spl-sub');
   if (splSub) splSub.textContent = 'Загружаем данные…';
 
-  const d = await GET('/api/bootstrap');
+  let d = null;
+  S._offline = false;
 
-  // If bootstrap returns empty (network error etc) — throw so bootApp can show splash error
-  if (!d || (!d.accounts && !d.categories)) {
-    if (splSub) splSub.textContent = '❌ Ошибка загрузки';
-    throw new Error('bootstrap returned empty response');
+  try {
+    d = await GET('/api/bootstrap');
+    if (!d || (!d.accounts && !d.categories)) {
+      throw new Error('bootstrap returned empty response');
+    }
+    // Успешно загрузили — сохраняем в кэш для офлайн-доступа
+    persistBootstrap(d);
+  } catch (err) {
+    // Нет сети или сервер недоступен — пробуем офлайн-кэш
+    const cached = loadCachedBootstrap();
+    if (cached) {
+      d = cached;
+      S._offline = true;
+      if (splSub) splSub.textContent = '📵 Офлайн-режим';
+    } else {
+      if (splSub) splSub.textContent = '❌ Ошибка загрузки';
+      throw new Error('bootstrap failed and no offline cache available');
+    }
   }
 
-  if (splSub) splSub.textContent = 'Готово ✓';
+  if (!S._offline && splSub) splSub.textContent = 'Готово ✓';
 
   S.accounts      = d.accounts       || [];
   S.usdRate       = parseFloat(d.usd_rate || 90);
@@ -200,7 +230,8 @@ export async function loadAll() {
   S.planned       = d.planned_income || [];
   S.goals         = d.goals          || [];
   S.recurring     = d.recurring      || [];
-  document.getElementById('cfg-usd').value = S.usdRate;
+  const usdEl = document.getElementById('cfg-usd');
+  if (usdEl) usdEl.value = S.usdRate;
 }
 
 export async function reloadAccounts() {
