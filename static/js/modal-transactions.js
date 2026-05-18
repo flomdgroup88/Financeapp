@@ -1,7 +1,7 @@
 // modal-transactions.js — расходы, доходы, переводы, редактирование, удаление
 // ─────────────────────────────────────────────────────────────
 import { S, fmtRub, today, withLoading } from './state.js';
-import { GET, POST, PUT, DEL, haptic, reloadAccounts, bustTx } from './api.js';
+import { GET, POST, PUT, DEL, haptic, reloadAccounts, bustTx, enqueueTx, patchOfflineBalance, getTxQueue } from './api.js';
 import { openModal, closeModal, showToast } from './modal-core.js';
 
 // ─── ТРАТА / ДОХОД (единый модал) ───────────────────────────
@@ -80,10 +80,24 @@ export async function saveExpense() {
     description: document.getElementById('e-comment').value.trim(),
     date:        document.getElementById('e-date').value,
   };
+
+  // Оптимистичное обновление баланса в памяти и в офлайн-кэше
+  const delta = isIncome ? amt : -amt;
   const acc = S.accounts.find(a => a.id === accId);
-  if (acc) acc.balance += isIncome ? amt : -amt;
+  if (acc) acc.balance += delta;
+  patchOfflineBalance(accId, delta);
+
   closeModal('ov-expense');
   window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
+
+  // Офлайн — ставим в очередь, отправим когда появится сеть
+  if (!navigator.onLine) {
+    enqueueTx(body);
+    const pending = getTxQueue().length;
+    showToast(`📵 Сохранено офлайн${pending > 1 ? ' · ' + pending + ' в очереди' : ''}`);
+    return;
+  }
+
   await POST('/api/transactions', body);
   bustTx();
   reloadAccounts();

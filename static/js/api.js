@@ -193,6 +193,63 @@ function loadCachedBootstrap() {
   } catch { return null; }
 }
 
+// ─── ОФЛАЙН-ОЧЕРЕДЬ ТРАНЗАКЦИЙ ───────────────────────────────
+// Транзакции, созданные без сети, хранятся в localStorage
+// и автоматически отправляются при восстановлении соединения
+
+const TX_QUEUE_KEY = 'fin_tx_queue';
+
+export function getTxQueue() {
+  try { return JSON.parse(localStorage.getItem(TX_QUEUE_KEY) || '[]'); } catch { return []; }
+}
+
+function saveTxQueue(q) {
+  try { localStorage.setItem(TX_QUEUE_KEY, JSON.stringify(q)); } catch {}
+}
+
+// Добавить транзакцию в очередь
+export function enqueueTx(body) {
+  const q = getTxQueue();
+  q.push({ body, ts: Date.now(), id: Math.random().toString(36).slice(2) });
+  saveTxQueue(q);
+}
+
+// Обновить баланс в офлайн-кэше (чтобы корректно отображался до синхронизации)
+export function patchOfflineBalance(accId, delta) {
+  try {
+    const raw = localStorage.getItem(OFFLINE_CACHE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    const acc = (data.accounts || []).find(a => a.id === accId);
+    if (acc) {
+      acc.balance += delta;
+      localStorage.setItem(OFFLINE_CACHE_KEY, JSON.stringify(data));
+    }
+  } catch {}
+}
+
+// Отправить все отложенные транзакции на сервер
+export async function flushTxQueue() {
+  const q = getTxQueue();
+  if (!q.length) return 0;
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (TG_INIT_DATA)    headers['X-Telegram-Init-Data'] = TG_INIT_DATA;
+  if (localAuth.token) headers['X-Session-Token']       = localAuth.token;
+
+  const failed = [];
+  let synced = 0;
+  for (const item of q) {
+    try {
+      const r = await fetch(API + '/api/transactions', { method: 'POST', headers, body: JSON.stringify(item.body) });
+      if (r.ok || r.status === 201) { synced++; }
+      else failed.push(item);
+    } catch { failed.push(item); }
+  }
+  saveTxQueue(failed);
+  return synced;
+}
+
 export async function loadAll() {
   // Один запрос вместо шести — экономим 5 RTT при каждом старте
   const splSub = document.getElementById('spl-sub');

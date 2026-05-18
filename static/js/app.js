@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx, authLogin, authSetup, authLogout, authStatus, localAuth } from './api.js';
+import { loadAll, GET, GETC, haptic, reloadAccounts, reloadSubscriptions, bustTx, authLogin, authSetup, authLogout, authStatus, localAuth, flushTxQueue, getTxQueue } from './api.js';
 import { getCached } from './cache.js';
 import { handlePickerClick, renderIconPicker, renderColorPicker } from './pickers.js';
 import { ICONS_GOAL, ICONS_RECUR } from './config.js';
@@ -694,10 +694,11 @@ function showAuthScreen(mode = 'login') {
 // ─── OFFLINE BANNER ──────────────────────────────────────────
 function showOfflineBanner() {
   if (document.getElementById('offline-banner')) return;
+  const pending = getTxQueue().length;
   const banner = document.createElement('div');
   banner.id = 'offline-banner';
   banner.innerHTML = `
-    <span>📵 Офлайн — данные могут быть устаревшими</span>
+    <span>📵 Офлайн${pending > 0 ? ' · <b>' + pending + ' в очереди</b>' : ''}</span>
     <button onclick="location.reload()" id="offline-retry-btn">Обновить</button>
   `;
   Object.assign(banner.style, {
@@ -740,12 +741,30 @@ function hideOfflineBanner() {
 }
 
 // Слушаем события сети
-window.addEventListener('online', () => {
-  if (S._offline) {
-    // Сеть вернулась — перезагружаемся, чтобы получить свежие данные
-    hideOfflineBanner();
-    location.reload();
+window.addEventListener('online', async () => {
+  hideOfflineBanner();
+
+  // Сначала отправляем очередь офлайн-транзакций
+  const pending = getTxQueue().length;
+  if (pending > 0) {
+    const synced = await flushTxQueue();
+    if (synced > 0) {
+      const toast = document.createElement('div');
+      toast.textContent = `✅ Синхронизировано транзакций: ${synced}`;
+      Object.assign(toast.style, {
+        position:'fixed', bottom:'80px', left:'50%', transform:'translateX(-50%)',
+        background:'#10b981', color:'#fff', padding:'10px 18px',
+        borderRadius:'12px', fontSize:'13px', zIndex:'9999',
+        boxShadow:'0 4px 12px rgba(0,0,0,.3)', whiteSpace:'nowrap',
+      });
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+      bustTx();
+    }
   }
+
+  // Перезагружаем страницу чтобы получить свежие данные
+  location.reload();
 });
 window.addEventListener('offline', () => {
   if (!S._offline) showOfflineBanner();
