@@ -33,7 +33,6 @@
     </div>
     <div class="hdr-right">
       <button class="hdr-btn" id="btn-transfer-hdr" title="Перевод">⇄</button>
-      <button class="hdr-btn" id="btn-income-hdr" title="Доход">＋💰</button>
       <button class="hdr-btn" id="btn-open-settings" title="Настройки">⚙️</button>
     </div>
   </header>
@@ -59,7 +58,6 @@
 
 <!-- FAB GROUP -->
 <div class="fab-group">
-  <button class="fab-btn" id="fab-income"  title="Доход">＋💰</button>
   <button class="fab-btn" id="fab-expense" title="Трата">＋</button>
 </div>
 
@@ -69,12 +67,16 @@
 <div class="overlay" id="ov-expense">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-hdr"><h3>Добавить трату</h3><button class="modal-close" data-close="ov-expense">✕</button></div>
+    <div class="modal-hdr"><h3 id="e-modal-title">Добавить трату</h3><button class="modal-close" data-close="ov-expense">✕</button></div>
     <div class="modal-body">
+      <div class="tx-type-toggle">
+        <button class="tx-type-btn active" id="toggle-expense" data-type="expense">💸 Трата</button>
+        <button class="tx-type-btn" id="toggle-income" data-type="income">💰 Доход</button>
+      </div>
       <div class="fg"><label>Сумма (₽)</label>
         <input id="e-amount" class="finput amount-big" type="number" placeholder="0" inputmode="decimal">
       </div>
-      <div class="fg"><label>Категория</label>
+      <div class="fg" id="e-cat-section"><label>Категория</label>
         <div id="e-cat-grid" class="cat-grid"></div>
       </div>
       <div class="fg"><label>Счёт</label>

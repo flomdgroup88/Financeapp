@@ -187,7 +187,6 @@ function wireBtn(id, fn) {
 wireBtn('btn-open-expense',  openExpenseModal);
 wireBtn('btn-save-expense',  saveExpense);
 wireBtn('btn-save-edit-tx',  saveEditTx);
-wireBtn('btn-open-income',   openIncomeModal);
 wireBtn('btn-save-income',   saveIncome);
 wireBtn('btn-save-transfer', saveTransfer);
 
@@ -231,7 +230,6 @@ wireBtn('btn-save-goal-deposit', saveGoalDeposit);
 wireBtn('btn-save-recur',     saveRecur);
 wireBtn('btn-del-recur',      deleteRecur);
 wireBtn('fab-expense',        openExpenseModal);
-wireBtn('fab-income',         openIncomeModal);
 const rPeriodEl = document.getElementById('r-period');
 if (rPeriodEl) rPeriodEl.addEventListener('change', onRecurPeriodChange);
 

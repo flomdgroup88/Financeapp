@@ -4,8 +4,37 @@ import { S, fmtRub, today, withLoading } from './state.js';
 import { GET, POST, PUT, DEL, haptic, reloadAccounts, bustTx } from './api.js';
 import { openModal, closeModal, showToast } from './modal-core.js';
 
-// ─── РАСХОД ──────────────────────────────────────────────────
+// ─── ТРАТА / ДОХОД (единый модал) ───────────────────────────
+// Текущий режим: 'expense' или 'income'
+let _txMode = 'expense';
+
+function _setTxMode(mode) {
+  _txMode = mode;
+  const isIncome = mode === 'income';
+
+  // Переключаем кнопки тоггла
+  document.getElementById('toggle-expense').classList.toggle('active', !isIncome);
+  document.getElementById('toggle-income').classList.toggle('active', isIncome);
+
+  // Категории нужны только для траты
+  const catSection = document.getElementById('e-cat-section');
+  if (catSection) catSection.style.display = isIncome ? 'none' : '';
+
+  // Меняем заголовок и кнопку сохранения
+  const title = document.getElementById('e-modal-title');
+  const btn   = document.getElementById('btn-save-expense');
+  if (title) title.textContent = isIncome ? 'Добавить доход' : 'Добавить трату';
+  if (btn)   btn.textContent   = isIncome ? 'Добавить доход' : 'Добавить трату';
+
+  // Цвет кнопки сохранения
+  if (btn) {
+    btn.style.background = isIncome ? '#10b981' : '';
+    btn.style.borderColor = isIncome ? '#10b981' : '';
+  }
+}
+
 export function openExpenseModal() {
+  _txMode = 'expense';
   S.selCatId = null;
   document.getElementById('e-amount').value  = '';
   document.getElementById('e-comment').value = '';
@@ -19,6 +48,14 @@ export function openExpenseModal() {
     `<option value="${a.id}" ${a.is_priority ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
   const prio = S.accounts.find(a => a.is_priority);
   if (prio) accSel.value = prio.id;
+  _setTxMode('expense');
+
+  // Вешаем обработчики тоггла (идемпотентно через замену)
+  const btnExp = document.getElementById('toggle-expense');
+  const btnInc = document.getElementById('toggle-income');
+  btnExp.onclick = () => { haptic(); _setTxMode('expense'); };
+  btnInc.onclick = () => { haptic(); _setTxMode('income'); };
+
   openModal('ov-expense');
 }
 
@@ -34,13 +71,17 @@ export async function saveExpense() {
   if (!amt || amt <= 0) return;
   haptic('medium');
   const accId = parseInt(document.getElementById('e-account').value);
+  const isIncome = _txMode === 'income';
   const body = {
-    account_id:  accId, category_id: S.selCatId, amount: amt, type: 'expense',
+    account_id:  accId,
+    category_id: isIncome ? null : (S.selCatId || null),
+    amount:      amt,
+    type:        _txMode,
     description: document.getElementById('e-comment').value.trim(),
     date:        document.getElementById('e-date').value,
   };
   const acc = S.accounts.find(a => a.id === accId);
-  if (acc) acc.balance -= amt;
+  if (acc) acc.balance += isIncome ? amt : -amt;
   closeModal('ov-expense');
   window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
   await POST('/api/transactions', body);
@@ -48,36 +89,16 @@ export async function saveExpense() {
   reloadAccounts();
 }
 
-// ─── ДОХОД ───────────────────────────────────────────────────
+// ─── ДОХОД — теперь просто открывает единый модал в режиме дохода ──
 export function openIncomeModal() {
-  document.getElementById('i-amount').value  = '';
-  document.getElementById('i-comment').value = '';
-  document.getElementById('i-date').value    = today();
-  const accSel = document.getElementById('i-account');
-  accSel.innerHTML = S.accounts.map(a =>
-    `<option value="${a.id}" ${a.is_priority ? 'selected' : ''}>${a.icon} ${a.name}${a.is_reserve ? ' 🔒' : ''}</option>`).join('');
-  const prio = S.accounts.find(a => a.is_priority);
-  if (prio) accSel.value = prio.id;
-  openModal('ov-income');
+  openExpenseModal();
+  // Переключаем на доход после открытия (DOM уже готов)
+  requestAnimationFrame(() => _setTxMode('income'));
 }
 
 export async function saveIncome() {
-  const amt = parseFloat(document.getElementById('i-amount').value);
-  if (!amt || amt <= 0) return;
-  haptic('medium');
-  const accId = parseInt(document.getElementById('i-account').value);
-  const body = {
-    account_id: accId, amount: amt, type: 'income',
-    description: document.getElementById('i-comment').value.trim(),
-    date:        document.getElementById('i-date').value,
-  };
-  const acc = S.accounts.find(a => a.id === accId);
-  if (acc) acc.balance += amt;
-  closeModal('ov-income');
-  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
-  await POST('/api/transactions', body);
-  bustTx();
-  reloadAccounts();
+  // Устаревшая функция — теперь saveExpense обрабатывает оба типа
+  await saveExpense();
 }
 
 // ─── ПЕРЕВОД ─────────────────────────────────────────────────

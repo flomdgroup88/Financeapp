@@ -813,3 +813,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   border-radius: 20px; padding: 4px 10px;
   font-size: 12px; cursor: pointer;
 }
+
+/* ─── TX TYPE TOGGLE (expense / income) ─────────────────────── */
+.tx-type-toggle{display:flex;gap:6px;margin-bottom:4px}
+.tx-type-btn{flex:1;padding:10px 8px;border-radius:12px;border:2px solid transparent;background:var(--bg2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
+.tx-type-btn[data-type="expense"].active{background:rgba(239,68,68,.15);color:#ef4444;border-color:#ef4444}
+.tx-type-btn[data-type="income"].active{background:rgba(16,185,129,.15);color:#10b981;border-color:#10b981}
