@@ -84,7 +84,10 @@ export async function saveExpense() {
 
   await POST('/api/transactions', body);
   bustTx();
-  reloadAccounts();
+  reloadAccounts(); // fire-and-forget balance update
+  // Force a fresh render so the new transaction appears immediately
+  // (cache was just busted — GETC will do real requests now)
+  window.__forceRenderCurrentTab?.() ?? window.__renderCurrentTab();
 }
 
 export function openIncomeModal() {

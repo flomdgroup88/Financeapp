@@ -15,8 +15,8 @@ export async function renderDashboard() {
   if (!el._hasData) el.innerHTML = `${skCard(3)}${skSection(4)}`;
 
   const [monthly, comparison] = await Promise.all([
-    GETC(dashKey, () => renderDashboard()),
-    GETC(cmpKey,  () => renderDashboard()),
+    GETC(dashKey, () => renderDashboard(), 'renderDashboard'),
+    GETC(cmpKey,  () => renderDashboard(), 'renderDashboard'),
   ]);
   el._hasData = true;
 

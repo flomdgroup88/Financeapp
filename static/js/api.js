@@ -104,12 +104,30 @@ export async function authStatus() {
 }
 
 // ─── CACHED GET (Stale-While-Revalidate) ────────────────────
-export async function GETC(path, onUpdate) {
+// _swr: map debounceKey → timer — prevents cascade renders when
+// multiple GETC calls share the same onUpdate callback.
+const _swrTimers = new Map();
+
+export async function GETC(path, onUpdate, debounceKey) {
   const cached = getCached(path);
   if (cached !== null) {
     GET(path).then(fresh => {
       const freshStr = JSON.stringify(fresh);
-      if (freshStr !== JSON.stringify(cached)) { setCached(path, fresh); if (onUpdate) onUpdate(fresh); }
+      if (freshStr !== JSON.stringify(cached)) {
+        setCached(path, fresh);
+        if (onUpdate) {
+          if (debounceKey) {
+            // Collapse multiple concurrent callbacks into one render
+            clearTimeout(_swrTimers.get(debounceKey));
+            _swrTimers.set(debounceKey, setTimeout(() => {
+              _swrTimers.delete(debounceKey);
+              onUpdate(fresh);
+            }, 80));
+          } else {
+            onUpdate(fresh);
+          }
+        }
+      }
     }).catch(() => {});
     return cached;
   }

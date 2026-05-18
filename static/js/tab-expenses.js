@@ -23,9 +23,9 @@ export async function renderExpenses() {
   </div>${skCard(2)}${skSection(3)}`;
 
   const [monthly, txData, budgetData] = await Promise.all([
-    GETC(mKey,  () => renderExpenses()),
-    GETC(txKey, () => renderExpenses()),
-    GETC(blKey, () => renderExpenses()),
+    GETC(mKey,  () => renderExpenses(), 'renderExpenses'),
+    GETC(txKey, () => renderExpenses(), 'renderExpenses'),
+    GETC(blKey, () => renderExpenses(), 'renderExpenses'),
   ]);
   el._hasData = true;
 
