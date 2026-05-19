@@ -44,7 +44,7 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
   }
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       <MonthNav year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
 
       {/* Total */}

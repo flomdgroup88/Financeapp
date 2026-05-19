@@ -10,13 +10,17 @@ export default function TopBar({ xpData, onProfile, onAdd }) {
   return (
     <div style={{
       position: "sticky", top: 0, zIndex: 100,
-      background: T.bg0 + "e8",
-      backdropFilter: "blur(16px)",
-      WebkitBackdropFilter: "blur(16px)",
+      background: T.bg0 + "f2",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
       borderBottom: `1px solid ${T.brdDim}`,
-      padding: "10px 16px 8px",
+      /* safe-area-inset-top для notch/Dynamic Island */
+      paddingTop: "max(env(safe-area-inset-top), 12px)",
+      paddingLeft: 16,
+      paddingRight: 16,
+      paddingBottom: 8,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
         {/* Logo */}
         <div style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.5, flex: 1 }}>
           <span style={{ color: T.em }}>V</span>
@@ -27,63 +31,46 @@ export default function TopBar({ xpData, onProfile, onAdd }) {
         <div style={{
           display: "flex", alignItems: "center", gap: 4,
           background: T.bg3, borderRadius: 20, padding: "4px 10px",
-          border: `1px solid ${streak >= 7 ? T.gold + "40" : T.brdDim}`,
+          border: `1px solid ${streak >= 7 ? T.gold + "50" : T.brdDim}`,
         }}>
-          <span style={{ fontSize: 14 }}>🔥</span>
+          <span style={{ fontSize: 13 }}>🔥</span>
           <span style={{
-            fontSize: 13, fontWeight: 700,
+            fontSize: 12, fontWeight: 700,
             color: streak >= 7 ? T.gold : T.muted,
             fontVariantNumeric: "tabular-nums",
-          }}>
-            {streak}
-          </span>
+          }}>{streak}</span>
         </div>
 
-        {/* Level badge */}
+        {/* Level */}
         <div style={{
           display: "flex", alignItems: "center", gap: 4,
           background: T.emDim, borderRadius: 20, padding: "4px 10px",
           border: `1px solid ${T.em}30`,
         }}>
-          <span style={{ fontSize: 12 }}>{rank.icon}</span>
-          <span style={{ fontSize: 12, fontWeight: 700, color: T.em }}>
-            Lvl {level}
-          </span>
+          <span style={{ fontSize: 11 }}>{rank.icon}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, color: T.em }}>Lvl {level}</span>
         </div>
 
-        {/* Add button */}
-        <button
-          onClick={onAdd}
-          style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: T.em, border: "none", color: "#fff",
-            fontSize: 20, cursor: "pointer", display: "flex",
-            alignItems: "center", justifyContent: "center",
-            fontWeight: 300, lineHeight: 1,
-          }}
-        >
-          +
-        </button>
+        {/* Add */}
+        <button onClick={onAdd} style={{
+          width: 34, height: 34, borderRadius: "50%",
+          background: T.em, border: "none", color: "#fff",
+          fontSize: 22, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          lineHeight: 1, fontWeight: 300,
+        }}>+</button>
 
         {/* Profile */}
-        <button
-          onClick={onProfile}
-          style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: T.bg3, border: `1px solid ${T.brd}`,
-            fontSize: 18, cursor: "pointer", display: "flex",
-            alignItems: "center", justifyContent: "center",
-          }}
-        >
-          👤
-        </button>
+        <button onClick={onProfile} style={{
+          width: 34, height: 34, borderRadius: "50%",
+          background: T.bg3, border: `1px solid ${T.brd}`,
+          fontSize: 16, cursor: "pointer",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>👤</button>
       </div>
 
       {/* XP mini-bar */}
-      <XPBar
-        xp={xp} level={level}
-        currentLevelXp={currentLevelXp} nextLevelXp={nextLevelXp}
-      />
+      <XPBar xp={xp} level={level} currentLevelXp={currentLevelXp} nextLevelXp={nextLevelXp} />
     </div>
   );
 }

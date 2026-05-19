@@ -94,7 +94,7 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
   }
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       {/* Presets */}
       <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4, marginBottom: 12 }}>
         {PRESETS.map(p => (

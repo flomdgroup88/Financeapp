@@ -21,7 +21,7 @@ export default function ProfileScreen({ xpData, achievements, bootstrap, onOpenS
   const earnedCount = allAchievements.filter(a => a.earned).length;
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       {/* Profile header */}
       <div style={{
         background: T.bg2, borderRadius: 20, border: `1px solid ${T.brd}`,

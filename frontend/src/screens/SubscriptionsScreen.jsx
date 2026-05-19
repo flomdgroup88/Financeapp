@@ -99,7 +99,7 @@ export default function SubscriptionsScreen({ bootstrap, onRefresh, onOpenSubscr
   }
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       {/* Total */}
       <Card accent={T.cyan} style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: T.muted, marginBottom: 4 }}>Итого в месяц</div>

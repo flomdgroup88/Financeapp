@@ -91,7 +91,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   }
 
   return (
-    <div style={{ padding: "0 0 100px" }}>
+    <div style={{ padding: "0 0 calc(88px + env(safe-area-inset-bottom))" }}>
       {/* Header balance */}
       <div style={{ padding: "20px 16px 0" }}>
         <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>

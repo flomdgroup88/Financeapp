@@ -64,7 +64,7 @@ export default function BalanceScreen({ bootstrap, onRefresh, onOpenTransfer, on
   }
 
   return (
-    <div style={{ padding: "16px 16px 100px" }}>
+    <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       {/* Total + donut */}
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
         <div>

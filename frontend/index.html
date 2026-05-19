@@ -10,8 +10,25 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <title>Vault — финансовый трекер</title>
   <style>
-    html, body { margin: 0; padding: 0; background: #080C0E; }
-    #root { min-height: 100dvh; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html {
+      background: #080C0E;
+      /* Поддержка safe area на iOS */
+      padding-top: env(safe-area-inset-top);
+    }
+    body {
+      margin: 0; padding: 0;
+      background: #080C0E;
+      /* Убираем лишний padding у body — TopBar сам управляет */
+      padding-top: 0 !important;
+    }
+    #root {
+      min-height: 100dvh;
+      /* dvh корректно работает на мобилках с адресной строкой */
+    }
+    /* Скрыть скроллбары везде */
+    * { scrollbar-width: none; -ms-overflow-style: none; }
+    *::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body>
