@@ -104,6 +104,17 @@ export default function TransferModal({ open, onClose, onSaved, bootstrap }) {
         <Button full onClick={save} disabled={loading} variant="primary">
           {loading ? "Переводим..." : "Перевести"}
         </Button>
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", marginTop: 4, padding: "13px",
+            background: "transparent", border: `1px solid ${T.brd}`,
+            borderRadius: 12, color: T.muted,
+            fontSize: 15, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Отмена
+        </button>
       </div>
     </BottomSheet>
   );

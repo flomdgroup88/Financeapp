@@ -65,6 +65,17 @@ export default function CategoryModal({ open, onClose, onSaved, category }) {
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
         <Button full onClick={save} disabled={loading}>{loading ? "Сохраняем..." : category ? "Сохранить" : "Создать"}</Button>
         {category?.id && <Button full variant="danger" onClick={remove} disabled={loading}>Удалить</Button>}
+        <button
+          onClick={onClose}
+          style={{
+            width: "100%", marginTop: 4, padding: "13px",
+            background: "transparent", border: `1px solid ${T.brd}`,
+            borderRadius: 12, color: T.muted,
+            fontSize: 15, fontWeight: 600, cursor: "pointer",
+          }}
+        >
+          Отмена
+        </button>
       </div>
     </BottomSheet>
   );

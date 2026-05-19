@@ -165,19 +165,33 @@ export function BottomSheet({ open, onClose, children, title, maxHeight = "92vh"
           maxHeight, overflow: "hidden", display: "flex", flexDirection: "column",
         }}
       >
-        {/* Handle */}
-        <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 0" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: T.brd }} />
-        </div>
-        {title && (
-          <div style={{
-            padding: "12px 20px 8px", fontSize: 17, fontWeight: 700,
-            color: T.text, borderBottom: `1px solid ${T.brdDim}`,
-          }}>
-            {title}
+        {/* Handle + header row */}
+        <div style={{ padding: "10px 16px 0", flexShrink: 0 }}>
+          {/* Handle */}
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: T.brd }} />
           </div>
-        )}
-        <div style={{ overflowY: "auto", flex: 1, padding: "0 0 env(safe-area-inset-bottom)" }}>
+          {/* Title + close button */}
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            paddingBottom: 12, borderBottom: `1px solid ${T.brdDim}`,
+          }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>
+              {title || ""}
+            </div>
+            <button
+              onClick={onClose}
+              style={{
+                width: 30, height: 30, borderRadius: "50%",
+                background: T.bg3, border: `1px solid ${T.brd}`,
+                color: T.muted, fontSize: 16, cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                lineHeight: 1, flexShrink: 0,
+              }}
+            >✕</button>
+          </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, paddingBottom: "env(safe-area-inset-bottom)" }}>
           {children}
         </div>
       </div>
