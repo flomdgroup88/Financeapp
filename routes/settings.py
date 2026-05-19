@@ -1,27 +1,34 @@
 """
-routes/settings.py — маршруты: Настройки
+routes/settings.py — Settings + gamification
 """
-from datetime import date, datetime, timedelta
-import calendar
-
-from flask import Blueprint, jsonify, request, g, send_from_directory, send_file
-
-from db import q, qone, qall, commit, uid, get_db, DB_PATH
+from flask import Blueprint, jsonify, request
+from db import q, qone, qall, commit, uid
 
 settings_bp = Blueprint("settings", __name__)
 
-@settings_bp.route("/api/settings", methods=["GET", "POST"])
+SETTINGS_KEYS = ["usd_rate", "default_currency", "nickname",
+                 "xp_total", "streak_current", "streak_best", "streak_last_date"]
+
+@settings_bp.route("/api/settings", methods=["GET", "PATCH", "POST"])
 def settings():
+    u = uid()
     if request.method == "GET":
-        row = qone("SELECT value FROM settings WHERE user_id=? AND key='usd_rate'", (uid(),))
-        return jsonify({"usd_rate": float(row["value"]) if row else 90})
+        rows = qall("SELECT key, value FROM settings WHERE user_id=?", (u,))
+        d = {r["key"]: r["value"] for r in rows}
+        return jsonify({
+            "usd_rate":          float(d.get("usd_rate", 90)),
+            "default_currency":  d.get("default_currency", "RUB"),
+            "nickname":          d.get("nickname", ""),
+            "xp_total":          int(d.get("xp_total", 0)),
+            "streak_current":    int(d.get("streak_current", 0)),
+            "streak_best":       int(d.get("streak_best", 0)),
+            "streak_last_date":  d.get("streak_last_date", None),
+        })
+
     data = request.get_json(force=True)
-    q("INSERT OR REPLACE INTO settings(user_id,key,value) VALUES(?,?,?)",
-      (uid(), "usd_rate", str(data.get("usd_rate", 90))))
+    for key in SETTINGS_KEYS:
+        if key in data and data[key] is not None:
+            q("INSERT OR REPLACE INTO settings(user_id,key,value) VALUES(?,?,?)",
+              (u, key, str(data[key])))
     commit()
     return jsonify({"ok": True})
-
-
-# ──────────────────────────────────────────────
-# Accounts
-# ──────────────────────────────────────────────

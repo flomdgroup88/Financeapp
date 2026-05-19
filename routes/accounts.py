@@ -12,17 +12,25 @@ accounts_bp = Blueprint("accounts", __name__)
 
 @accounts_bp.route("/api/bootstrap", methods=["GET"])
 def bootstrap():
-    """Возвращает все начальные данные одним запросом вместо 6."""
+    """Возвращает все начальные данные одним запросом."""
     u = uid()
-    cfg  = qone("SELECT value FROM settings WHERE user_id=? AND key='usd_rate'", (u,))
+    settings_rows = {r["key"]: r["value"] for r in qall("SELECT key,value FROM settings WHERE user_id=?", (u,))}
     return jsonify({
         "accounts":      qall("SELECT * FROM accounts WHERE user_id=? ORDER BY sort_order, id", (u,)),
-        "usd_rate":      float(cfg["value"]) if cfg else 90,
+        "usd_rate":      float(settings_rows.get("usd_rate", 90)),
+        "default_currency": settings_rows.get("default_currency", "RUB"),
+        "nickname":      settings_rows.get("nickname", ""),
         "categories":    qall("SELECT * FROM categories WHERE user_id=? ORDER BY sort_order, id", (u,)),
         "subscriptions": qall("SELECT * FROM subscriptions WHERE user_id=? ORDER BY sort_order, id", (u,)),
         "planned_income":qall("SELECT * FROM planned_income WHERE user_id=? ORDER BY id", (u,)),
         "goals":         qall("SELECT * FROM savings_goals WHERE user_id=? ORDER BY id", (u,)),
         "recurring":     qall("SELECT * FROM recurring_transactions WHERE user_id=? ORDER BY id", (u,)),
+        "gamification": {
+            "xp_total":         int(settings_rows.get("xp_total", 0)),
+            "streak_current":   int(settings_rows.get("streak_current", 0)),
+            "streak_best":      int(settings_rows.get("streak_best", 0)),
+            "streak_last_date": settings_rows.get("streak_last_date"),
+        },
     })
 
 
