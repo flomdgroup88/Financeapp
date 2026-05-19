@@ -12,6 +12,8 @@ function _setTxMode(mode) {
   const isIncome = mode === 'income';
   document.getElementById('toggle-expense').classList.toggle('active', !isIncome);
   document.getElementById('toggle-income').classList.toggle('active', isIncome);
+  const pill = document.getElementById('tx-type-pill');
+  if (pill) pill.classList.toggle('income-mode', isIncome);
   const catSection = document.getElementById('e-cat-section');
   if (catSection) catSection.style.display = isIncome ? 'none' : '';
   const title = document.getElementById('e-modal-title');

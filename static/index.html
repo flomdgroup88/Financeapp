@@ -70,8 +70,15 @@
     <div class="modal-hdr"><h3 id="e-modal-title">Добавить трату</h3><button class="modal-close" data-close="ov-expense">✕</button></div>
     <div class="modal-body">
       <div class="tx-type-toggle">
-        <button class="tx-type-btn active" id="toggle-expense" data-type="expense">💸 Трата</button>
-        <button class="tx-type-btn" id="toggle-income" data-type="income">💰 Доход</button>
+        <div class="tx-type-pill" id="tx-type-pill"></div>
+        <button class="tx-type-btn active" id="toggle-expense" data-type="expense">
+          <span class="tx-type-icon">💸</span>
+          <span class="tx-type-label">Трата</span>
+        </button>
+        <button class="tx-type-btn" id="toggle-income" data-type="income">
+          <span class="tx-type-icon">💰</span>
+          <span class="tx-type-label">Доход</span>
+        </button>
       </div>
       <div class="fg"><label>Сумма (₽)</label>
         <input id="e-amount" class="finput amount-big" type="number" placeholder="0" inputmode="decimal">

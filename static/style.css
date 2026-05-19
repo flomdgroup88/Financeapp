@@ -815,7 +815,56 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 }
 
 /* ─── TX TYPE TOGGLE (expense / income) ─────────────────────── */
-.tx-type-toggle{display:flex;gap:6px;margin-bottom:4px}
-.tx-type-btn{flex:1;padding:10px 8px;border-radius:12px;border:2px solid transparent;background:var(--bg2);color:var(--text2);font-size:14px;font-weight:600;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
-.tx-type-btn[data-type="expense"].active{background:rgba(239,68,68,.15);color:#ef4444;border-color:#ef4444}
-.tx-type-btn[data-type="income"].active{background:rgba(16,185,129,.15);color:#10b981;border-color:#10b981}
+.tx-type-toggle{
+  position:relative;
+  display:flex;
+  gap:0;
+  margin-bottom:18px;
+  background:rgba(255,255,255,.06);
+  border-radius:16px;
+  padding:4px;
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.3);
+}
+.tx-type-pill{
+  position:absolute;
+  top:4px;
+  left:4px;
+  width:calc(50% - 4px);
+  height:calc(100% - 8px);
+  border-radius:13px;
+  background:linear-gradient(135deg,#ef4444,#dc2626);
+  box-shadow:0 2px 12px rgba(239,68,68,.4),0 1px 4px rgba(0,0,0,.3);
+  transition:transform .3s cubic-bezier(.34,1.56,.64,1),background .3s ease,box-shadow .3s ease;
+  z-index:0;
+  will-change:transform;
+}
+.tx-type-pill.income-mode{
+  transform:translateX(100%);
+  background:linear-gradient(135deg,#10b981,#059669);
+  box-shadow:0 2px 12px rgba(16,185,129,.4),0 1px 4px rgba(0,0,0,.3);
+}
+.tx-type-btn{
+  flex:1;
+  position:relative;
+  z-index:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  padding:12px 8px 10px;
+  border-radius:13px;
+  border:none;
+  background:transparent;
+  color:var(--text2);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:color .25s ease,transform .15s ease;
+  -webkit-tap-highlight-color:transparent;
+  user-select:none;
+}
+.tx-type-btn:active{transform:scale(.97)}
+.tx-type-icon{font-size:20px;line-height:1;transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+.tx-type-label{font-size:12px;font-weight:700;letter-spacing:.3px;text-transform:uppercase}
+.tx-type-btn.active{color:#fff}
+.tx-type-btn.active .tx-type-icon{transform:scale(1.15)}
