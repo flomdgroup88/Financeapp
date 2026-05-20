@@ -1,4 +1,4 @@
-# 💼 Finance Telegram Mini App 1
+# 💼 Finance Telegram Mini App 
 
 Личный финансовый трекер — Telegram Mini App на Flask + SQLite.
 
