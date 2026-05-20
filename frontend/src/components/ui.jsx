@@ -135,12 +135,15 @@ export function BottomSheet({ open, onClose, children, title, maxHeight = "92vh"
   useEffect(() => {
     if (open) {
       setVisible(true);
+      document.body.style.overflow = "hidden";
       requestAnimationFrame(() => setAnimating(true));
     } else {
       setAnimating(false);
+      document.body.style.overflow = "";
       const t = setTimeout(() => setVisible(false), 300);
       return () => clearTimeout(t);
     }
+    return () => { document.body.style.overflow = ""; };
   }, [open]);
 
   if (!visible) return null;
@@ -153,7 +156,7 @@ export function BottomSheet({ open, onClose, children, title, maxHeight = "92vh"
         transition: "background 0.3s", display: "flex",
         alignItems: "flex-end",
       }}
-      onPointerDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
         style={{
@@ -164,6 +167,7 @@ export function BottomSheet({ open, onClose, children, title, maxHeight = "92vh"
           transition: "transform 0.32s cubic-bezier(0.32,0.72,0,1)",
           maxHeight, overflow: "hidden", display: "flex", flexDirection: "column",
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Handle + header row */}
         <div style={{ padding: "10px 16px 0", flexShrink: 0 }}>
@@ -182,16 +186,16 @@ export function BottomSheet({ open, onClose, children, title, maxHeight = "92vh"
             <button
               onClick={onClose}
               style={{
-                width: 30, height: 30, borderRadius: "50%",
+                width: 36, height: 36, borderRadius: "50%",
                 background: T.bg3, border: `1px solid ${T.brd}`,
-                color: T.muted, fontSize: 16, cursor: "pointer",
+                color: T.muted, fontSize: 18, cursor: "pointer",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 lineHeight: 1, flexShrink: 0,
               }}
             >✕</button>
           </div>
         </div>
-        <div style={{ overflowY: "auto", flex: 1, paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <div style={{ overflowY: "auto", flex: 1, paddingBottom: "env(safe-area-inset-bottom)", overscrollBehavior: "contain" }}>
           {children}
         </div>
       </div>

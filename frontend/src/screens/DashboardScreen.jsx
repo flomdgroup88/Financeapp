@@ -8,7 +8,7 @@ import {
 } from "../components/ui";
 import { MONTHS_SHORT } from "../constants";
 
-export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings }) {
+export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings, onNavigate }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -17,21 +17,22 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   const [loading, setLoading] = useState(true);
 
   const usdRate = bootstrap?.usd_rate || 90;
+  const rates = bootstrap || { usd_rate: 90 };
   const accounts = bootstrap?.accounts || [];
   const subs = bootstrap?.subscriptions || [];
   const goals = bootstrap?.goals || [];
 
   const activeBalance = accounts
     .filter(a => !a.is_reserve)
-    .reduce((s, a) => s + toRub(a.balance, a.currency, usdRate), 0);
+    .reduce((s, a) => s + toRub(a.balance, a.currency, rates), 0);
   const reserveBalance = accounts
     .filter(a => a.is_reserve)
-    .reduce((s, a) => s + toRub(a.balance, a.currency, usdRate), 0);
+    .reduce((s, a) => s + toRub(a.balance, a.currency, rates), 0);
 
   const monthSubTotal = subs
     .filter(a => a.is_active)
     .reduce((s, sub) => {
-      const rub = toRub(sub.amount, sub.currency, usdRate);
+      const rub = toRub(sub.amount, sub.currency, rates);
       return s + (sub.period === "yearly" ? rub / 12 : rub);
     }, 0);
 
@@ -126,11 +127,11 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
       {/* Summary cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, padding: "16px 16px 0" }}>
         {[
-          { label: "Расходы", value: stats?.total_expenses || 0, color: T.red, icon: "↓" },
-          { label: "Доходы",  value: stats?.total_income || 0,   color: T.em,  icon: "↑" },
-          { label: "Подписки", value: monthSubTotal,              color: T.cyan, icon: "🔔" },
+          { label: "Расходы", value: stats?.total_expenses || 0, color: T.red, icon: "↓", tab: "expenses" },
+          { label: "Доходы",  value: stats?.total_income || 0,   color: T.em,  icon: "↑", tab: "history" },
+          { label: "Подписки", value: monthSubTotal,              color: T.cyan, icon: "🔔", tab: "subs" },
         ].map(item => (
-          <Card key={item.label} accent={item.color} style={{ padding: 12 }}>
+          <Card key={item.label} accent={item.color} style={{ padding: 12 }} onClick={() => onNavigate && onNavigate(item.tab)}>
             <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{item.label}</div>
             {loading ? <Skeleton height={20} /> : (
               <div style={{ fontSize: 15, fontWeight: 700, color: item.color, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
@@ -236,7 +237,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
                   </div>
                 </div>
                 <span style={{ fontSize: 13, color: T.red, fontWeight: 600 }}>
-                  {fmt(toRub(sub.amount, sub.currency, usdRate))}
+                  {fmt(toRub(sub.amount, sub.currency, rates))}
                 </span>
               </div>
             ))}

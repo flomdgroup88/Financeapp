@@ -12,11 +12,16 @@ export function fmtRub(n, usdRate = 90) {
   return fmt(n);
 }
 
-export function toRub(amount, currency, usdRate = 90) {
+export function toRub(amount, currency, ratesOrUsd = 90) {
+  const isObj = ratesOrUsd !== null && typeof ratesOrUsd === "object";
+  const usdRate = isObj ? (ratesOrUsd.usd_rate || 90) : ratesOrUsd;
+  const eurRate = isObj ? (ratesOrUsd.eur_rate || 98)  : usdRate * 1.08;
+  const gbpRate = isObj ? (ratesOrUsd.gbp_rate || 115) : usdRate * 1.27;
+  const cnyRate = isObj ? (ratesOrUsd.cny_rate || 12)  : usdRate / 7.3;
   if (currency === "USD") return amount * usdRate;
-  if (currency === "EUR") return amount * usdRate * 1.08;
-  if (currency === "GBP") return amount * usdRate * 1.27;
-  if (currency === "CNY") return amount * (usdRate / 7.3);
+  if (currency === "EUR") return amount * eurRate;
+  if (currency === "GBP") return amount * gbpRate;
+  if (currency === "CNY") return amount * cnyRate;
   return amount;
 }
 

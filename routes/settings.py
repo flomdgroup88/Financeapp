@@ -6,7 +6,7 @@ from db import q, qone, qall, commit, uid
 
 settings_bp = Blueprint("settings", __name__)
 
-SETTINGS_KEYS = ["usd_rate", "default_currency", "nickname",
+SETTINGS_KEYS = ["usd_rate", "eur_rate", "gbp_rate", "cny_rate", "default_currency", "nickname",
                  "xp_total", "streak_current", "streak_best", "streak_last_date"]
 
 @settings_bp.route("/api/settings", methods=["GET", "PATCH", "POST"])
@@ -17,6 +17,9 @@ def settings():
         d = {r["key"]: r["value"] for r in rows}
         return jsonify({
             "usd_rate":          float(d.get("usd_rate", 90)),
+            "eur_rate":          float(d.get("eur_rate", 98)),
+            "gbp_rate":          float(d.get("gbp_rate", 115)),
+            "cny_rate":          float(d.get("cny_rate", 12)),
             "default_currency":  d.get("default_currency", "RUB"),
             "nickname":          d.get("nickname", ""),
             "xp_total":          int(d.get("xp_total", 0)),

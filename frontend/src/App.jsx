@@ -109,7 +109,7 @@ export default function App() {
 
   function onSubSaved() {
     refreshBootstrap();
-    addToast("Подписка обновлена", "success");
+    addToast("Подписка сохранена", "success");
   }
 
   function onTransferSaved() {
@@ -190,6 +190,7 @@ export default function App() {
             onAddTransaction={() => openTx(null)}
             onOpenGoals={() => setGoalModal(true)}
             onOpenSettings={() => setSettingsModal(true)}
+            onNavigate={(tab) => { setProfile(false); setTab(tab); }}
           />
         ) : tab === "history" ? (
           <HistoryScreen

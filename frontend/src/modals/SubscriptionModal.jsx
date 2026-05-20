@@ -48,12 +48,19 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
         account_id: accountId ? parseInt(accountId) : null,
         icon, color,
       };
-      if (subscription?.id) await put(`/api/subscriptions/${subscription.id}`, body);
-      else await post("/api/subscriptions", body);
+      let result;
+      if (subscription?.id) result = await put(`/api/subscriptions/${subscription.id}`, body);
+      else result = await post("/api/subscriptions", body);
+
+      if (result?.offline) {
+        setError("Сохранено офлайн — появится при подключении к сети");
+        onSaved && onSaved();
+        return;
+      }
       onSaved && onSaved();
       onClose();
     } catch (e) { setError(e.message); }
-    setLoading(false);
+    finally { setLoading(false); }
   }
 
   async function remove() {

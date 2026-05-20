@@ -6,6 +6,7 @@ import { Card, Button, EmptyState } from "../components/ui";
 
 export default function SubscriptionsScreen({ bootstrap, onRefresh, onOpenSubscription }) {
   const usdRate = bootstrap?.usd_rate || 90;
+  const rates = bootstrap || { usd_rate: 90 };
   const subs = bootstrap?.subscriptions || [];
   const accounts = bootstrap?.accounts || [];
 
@@ -13,7 +14,7 @@ export default function SubscriptionsScreen({ bootstrap, onRefresh, onOpenSubscr
   const inactive = subs.filter(s => !s.is_active);
 
   const monthTotal = active.reduce((sum, s) => {
-    const rub = toRub(s.amount, s.currency, usdRate);
+    const rub = toRub(s.amount, s.currency, rates);
     return sum + (s.period === "yearly" ? rub / 12 : rub);
   }, 0);
 
@@ -31,7 +32,7 @@ export default function SubscriptionsScreen({ bootstrap, onRefresh, onOpenSubscr
 
   function SubRow({ sub }) {
     const days = daysUntil(sub.next_date);
-    const rub = toRub(sub.amount, sub.currency, usdRate);
+    const rub = toRub(sub.amount, sub.currency, rates);
     const monthRub = sub.period === "yearly" ? rub / 12 : rub;
     const urgent = days !== null && days <= 3 && sub.is_active;
 

@@ -8,6 +8,9 @@ import { CURRENCIES } from "../constants";
 
 export default function SettingsModal({ open, onClose, bootstrap, onRefresh, onLogout }) {
   const [usdRate, setUsdRate]     = useState(String(bootstrap?.usd_rate || 90));
+  const [eurRate, setEurRate]     = useState(String(bootstrap?.eur_rate || 98));
+  const [gbpRate, setGbpRate]     = useState(String(bootstrap?.gbp_rate || 115));
+  const [cnyRate, setCnyRate]     = useState(String(bootstrap?.cny_rate || 12));
   const [nickname, setNickname]   = useState(bootstrap?.nickname || "");
   const [currency, setCurrency]   = useState(bootstrap?.default_currency || "RUB");
   const [saving, setSaving]       = useState(false);
@@ -21,6 +24,9 @@ export default function SettingsModal({ open, onClose, bootstrap, onRefresh, onL
   useEffect(() => {
     if (open) {
       setUsdRate(String(bootstrap?.usd_rate || 90));
+      setEurRate(String(bootstrap?.eur_rate || 98));
+      setGbpRate(String(bootstrap?.gbp_rate || 115));
+      setCnyRate(String(bootstrap?.cny_rate || 12));
       setNickname(bootstrap?.nickname || "");
       setCurrency(bootstrap?.default_currency || "RUB");
       setMsg("");
@@ -33,6 +39,9 @@ export default function SettingsModal({ open, onClose, bootstrap, onRefresh, onL
     try {
       await patch("/api/settings", {
         usd_rate: parseFloat(usdRate) || 90,
+        eur_rate: parseFloat(eurRate) || 98,
+        gbp_rate: parseFloat(gbpRate) || 115,
+        cny_rate: parseFloat(cnyRate) || 12,
         nickname: nickname.trim(),
         default_currency: currency,
       });
@@ -110,6 +119,9 @@ export default function SettingsModal({ open, onClose, bootstrap, onRefresh, onL
                 <Select label="Основная валюта" value={currency} onChange={setCurrency}
                   options={CURRENCIES.map(c => ({ value: c, label: c }))} />
                 <Input label="Курс USD → RUB" type="number" value={usdRate} onChange={setUsdRate} hint="Используется для мульти-валютных счетов" />
+                <Input label="Курс EUR → RUB" type="number" value={eurRate} onChange={setEurRate} />
+                <Input label="Курс GBP → RUB" type="number" value={gbpRate} onChange={setGbpRate} />
+                <Input label="Курс CNY → RUB" type="number" value={cnyRate} onChange={setCnyRate} />
                 {msg && <div style={{ fontSize: 13, color: T.em }}>{msg}</div>}
                 <Button full onClick={saveGeneral} disabled={saving}>{saving ? "Сохраняем..." : "Сохранить"}</Button>
                 <div style={{ height: 1, background: T.brdDim }} />
@@ -175,7 +187,6 @@ export default function SettingsModal({ open, onClose, bootstrap, onRefresh, onL
         onSaved={() => {
           setCatModalOpen(false);
           onRefresh && onRefresh();
-          setCategories(bootstrap?.categories || []);
         }}
       />
     </>

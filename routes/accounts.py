@@ -18,6 +18,9 @@ def bootstrap():
     return jsonify({
         "accounts":      qall("SELECT * FROM accounts WHERE user_id=? ORDER BY sort_order, id", (u,)),
         "usd_rate":      float(settings_rows.get("usd_rate", 90)),
+        "eur_rate":      float(settings_rows.get("eur_rate", 98)),
+        "gbp_rate":      float(settings_rows.get("gbp_rate", 115)),
+        "cny_rate":      float(settings_rows.get("cny_rate", 12)),
         "default_currency": settings_rows.get("default_currency", "RUB"),
         "nickname":      settings_rows.get("nickname", ""),
         "categories":    qall("SELECT * FROM categories WHERE user_id=? ORDER BY sort_order, id", (u,)),
