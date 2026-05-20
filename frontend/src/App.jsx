@@ -278,17 +278,6 @@ export default function App() {
         bootstrap={bootstrap}
       />
 
-      {/* Profile sheet */}
-      {showProfile && (
-        <div
-          style={{
-            position: "fixed", inset: 0, zIndex: 50,
-            background: "transparent",
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setProfile(false); }}
-        />
-      )}
-
       {/* ── Toasts / Popups ─────────────────────────────────────────── */}
       {xpPopup && (
         <XPGainPopup
