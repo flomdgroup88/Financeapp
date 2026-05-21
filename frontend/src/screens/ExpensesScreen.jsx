@@ -2,9 +2,171 @@ import { useState, useEffect } from "react";
 import { T } from "../theme";
 import { get } from "../api";
 import { fmt, monthRange } from "../utils";
-import { Card, MonthNav, DonutChart, ProgressBar, Button, Skeleton, EmptyState } from "../components/ui";
+import { Card, MonthNav, DonutChart, ProgressBar, Button, Skeleton, EmptyState, BottomSheet, Spinner } from "../components/ui";
 import BudgetsModal from "../modals/BudgetsModal";
+import TransactionModal from "../modals/TransactionModal";
 
+// ─── Category drill-down sheet ────────────────────────────────────────────────
+function CategorySheet({ cat, year, month, open, onClose, bootstrap, onRefresh }) {
+  const [txs, setTxs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [editTx, setEditTx] = useState(null);
+
+  useEffect(() => {
+    if (!open || !cat) return;
+    setLoading(true);
+    const { start, end } = monthRange(year, month);
+    get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
+      .then(r => setTxs(r.transactions || []))
+      .catch(() => setTxs([]))
+      .finally(() => setLoading(false));
+  }, [open, cat, year, month]);
+
+  if (!cat) return null;
+
+  // Group by date
+  const grouped = txs.reduce((acc, tx) => {
+    (acc[tx.date] = acc[tx.date] || []).push(tx);
+    return acc;
+  }, {});
+  const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+
+  function formatDate(iso) {
+    const d = new Date(iso + "T00:00:00");
+    return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
+  }
+
+  return (
+    <>
+      <BottomSheet open={open} onClose={onClose} title="" maxHeight="92vh">
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 16px 16px" }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12,
+            background: `${cat.color || T.em}25`,
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0,
+          }}>
+            {cat.icon}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{cat.name}</div>
+            <div style={{ fontSize: 13, color: T.muted }}>
+              {new Date(year, month - 1).toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
+            </div>
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.red, fontVariantNumeric: "tabular-nums" }}>
+            {fmt(cat.total)}
+          </div>
+        </div>
+
+        <div style={{ height: 1, background: T.brd, margin: "0 16px 16px" }} />
+
+        {/* Body */}
+        <div style={{ padding: "0 16px 24px", overflowY: "auto", maxHeight: "calc(92vh - 120px)" }}>
+          {loading ? (
+            <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+              <Spinner size={28} color={cat.color || T.em} />
+            </div>
+          ) : txs.length === 0 ? (
+            <EmptyState icon="🔍" title="Нет транзакций" desc="В этом месяце ничего нет" />
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {dates.map(date => (
+                <div key={date}>
+                  {/* Date header */}
+                  <div style={{
+                    fontSize: 12, fontWeight: 600, color: T.muted,
+                    textTransform: "uppercase", letterSpacing: "0.06em",
+                    marginBottom: 8,
+                  }}>
+                    {formatDate(date)}
+                  </div>
+                  {/* Transactions for this date */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {grouped[date].map(tx => (
+                      <div
+                        key={tx.id}
+                        onClick={() => setEditTx(tx)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 12,
+                          padding: "10px 12px", borderRadius: 12,
+                          background: T.bg2, border: `1px solid ${T.brd}`,
+                          cursor: "pointer", transition: "opacity 0.15s",
+                        }}
+                        onPointerDown={e => e.currentTarget.style.opacity = "0.6"}
+                        onPointerUp={e => e.currentTarget.style.opacity = "1"}
+                        onPointerLeave={e => e.currentTarget.style.opacity = "1"}
+                      >
+                        {/* Account badge */}
+                        <div style={{
+                          fontSize: 11, color: T.muted, background: T.bg3 || T.brd,
+                          borderRadius: 6, padding: "2px 7px", flexShrink: 0, whiteSpace: "nowrap",
+                        }}>
+                          {tx.account_name || "—"}
+                        </div>
+
+                        {/* Description */}
+                        <div style={{
+                          flex: 1, fontSize: 14, color: tx.description ? T.text : T.muted,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        }}>
+                          {tx.description || "Без описания"}
+                        </div>
+
+                        {/* Amount */}
+                        <div style={{
+                          fontSize: 15, fontWeight: 700,
+                          color: T.red,
+                          fontVariantNumeric: "tabular-nums", flexShrink: 0,
+                        }}>
+                          −{fmt(tx.amount)}
+                        </div>
+
+                        {/* Chevron */}
+                        <div style={{ color: T.muted, fontSize: 12, flexShrink: 0 }}>›</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* Summary footer */}
+              <div style={{
+                display: "flex", justifyContent: "space-between",
+                padding: "12px 14px", borderRadius: 12,
+                background: `${cat.color || T.em}12`,
+                border: `1px solid ${cat.color || T.em}30`,
+              }}>
+                <span style={{ fontSize: 13, color: T.muted }}>{txs.length} операций</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.red, fontVariantNumeric: "tabular-nums" }}>
+                  {fmt(cat.total)}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* Edit transaction modal */}
+      <TransactionModal
+        open={!!editTx}
+        onClose={() => setEditTx(null)}
+        transaction={editTx}
+        bootstrap={bootstrap}
+        onSaved={() => {
+          setEditTx(null);
+          // Reload transactions in this sheet
+          const { start, end } = monthRange(year, month);
+          get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
+            .then(r => setTxs(r.transactions || []));
+          onRefresh?.();
+        }}
+      />
+    </>
+  );
+}
+
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function ExpensesScreen({ bootstrap, onRefresh }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -61,7 +223,11 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
           <DonutChart data={donutData} size={140} onClick={c => setSelectedCat(c.item)} />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
             {cats.slice(0, 5).map(c => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div
+                key={c.id}
+                onClick={() => setSelectedCat(c)}
+                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
+              >
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: c.color || T.em, flexShrink: 0 }} />
                 <span style={{ fontSize: 12, color: T.muted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.name}
@@ -112,9 +278,12 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: budget ? 6 : 0 }}>
                       <span style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>{cat.name}</span>
-                      <span style={{ fontSize: 14, color: overBudget ? T.red : T.red, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-                        {fmt(cat.total)}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontSize: 14, color: overBudget ? T.red : T.red, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                          {fmt(cat.total)}
+                        </span>
+                        <span style={{ fontSize: 14, color: T.muted }}>›</span>
+                      </div>
                     </div>
                     {budget && (
                       <>
@@ -132,6 +301,17 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         </div>
       )}
 
+      {/* Category drill-down */}
+      <CategorySheet
+        cat={selectedCat}
+        year={year}
+        month={month}
+        open={!!selectedCat}
+        onClose={() => setSelectedCat(null)}
+        bootstrap={bootstrap}
+        onRefresh={onRefresh}
+      />
+
       <BudgetsModal
         open={showBudgets}
         onClose={() => setShowBudgets(false)}
@@ -139,7 +319,6 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         year={year} month={month}
         onSaved={() => {
           setShowBudgets(false);
-          // re-load budgets
           get(`/api/budget-limits?year=${year}&month=${month}`)
             .then(b => setBudgets(b.budget_limits || []));
         }}
