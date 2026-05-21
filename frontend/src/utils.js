@@ -1,11 +1,14 @@
 export function fmt(n, currency = "RUB") {
+  const isNeg = (n || 0) < 0;
   const num = Math.abs(n || 0);
   const formatted = num.toLocaleString("ru-RU", { maximumFractionDigits: 0 });
-  if (currency === "USD") return `$${formatted}`;
-  if (currency === "EUR") return `€${formatted}`;
-  if (currency === "CNY") return `¥${formatted}`;
-  if (currency === "GBP") return `£${formatted}`;
-  return `${formatted} ₽`;
+  let result;
+  if (currency === "USD") result = `$${formatted}`;
+  else if (currency === "EUR") result = `€${formatted}`;
+  else if (currency === "CNY") result = `¥${formatted}`;
+  else if (currency === "GBP") result = `£${formatted}`;
+  else result = `${formatted} ₽`;
+  return isNeg ? `-${result}` : result;
 }
 
 export function fmtRub(n, usdRate = 90) {
