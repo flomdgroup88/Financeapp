@@ -40,8 +40,8 @@ export default function TransferModal({ open, onClose, onSaved, bootstrap }) {
     setError("");
     try {
       await post("/api/transfers", {
-        from_account_id: parseInt(fromId),
-        to_account_id:   parseInt(toId),
+        from_id: parseInt(fromId),
+        to_id:   parseInt(toId),
         amount: amt,
       });
       onSaved && onSaved();
