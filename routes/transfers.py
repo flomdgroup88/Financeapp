@@ -45,13 +45,12 @@ def transfers():
     q("UPDATE accounts SET balance=balance+? WHERE id=? AND user_id=?", (to_amount, to_id,   uid()))
 
     label = desc or "Перевод"
-    db = get_db()
-    q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
+    cur1 = q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
       (uid(), from_id, amount,    "transfer", f"{label} → {to_acc['name']}", tx_date))
-    from_tx_id = db.lastrowid
-    q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
+    from_tx_id = cur1.lastrowid
+    cur2 = q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
       (uid(), to_id,   to_amount, "transfer", f"{label} ← {from_acc['name']}", tx_date))
-    to_tx_id = db.lastrowid
+    to_tx_id = cur2.lastrowid
     # Link the pair
     q("UPDATE transactions SET paired_tx_id=? WHERE id=?", (to_tx_id,   from_tx_id))
     q("UPDATE transactions SET paired_tx_id=? WHERE id=?", (from_tx_id, to_tx_id))
