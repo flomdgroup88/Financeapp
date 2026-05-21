@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { T } from "../theme";
 import { get } from "../api";
 import { fmt, monthRange } from "../utils";
@@ -7,24 +7,29 @@ import BudgetsModal from "../modals/BudgetsModal";
 import TransactionModal from "../modals/TransactionModal";
 
 // ─── Category drill-down sheet ────────────────────────────────────────────────
+// Всегда смонтирован — BottomSheet управляет open/close через prop,
+// чтобы анимация корректно отрабатывала (иначе монтаж с open=true ломает slide-in).
 function CategorySheet({ cat, year, month, open, onClose, bootstrap, onRefresh }) {
   const [txs, setTxs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editTx, setEditTx] = useState(null);
+  const prevCatId = useRef(null);
 
   useEffect(() => {
     if (!open || !cat) return;
+    // Не перезапрашивать если та же категория и уже есть данные
+    if (cat.id === prevCatId.current && txs.length > 0) return;
+    prevCatId.current = cat.id;
     setLoading(true);
+    setTxs([]);
     const { start, end } = monthRange(year, month);
     get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
       .then(r => setTxs(r.transactions || []))
       .catch(() => setTxs([]))
       .finally(() => setLoading(false));
-  }, [open, cat, year, month]);
+  }, [open, cat?.id, year, month]);
 
-  if (!cat) return null;
-
-  // Group by date
+  // Группировка по дате
   const grouped = txs.reduce((acc, tx) => {
     (acc[tx.date] = acc[tx.date] || []).push(tx);
     return acc;
@@ -39,115 +44,109 @@ function CategorySheet({ cat, year, month, open, onClose, bootstrap, onRefresh }
   return (
     <>
       <BottomSheet open={open} onClose={onClose} title="" maxHeight="92vh">
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 16px 16px" }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12,
-            background: `${cat.color || T.em}25`,
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0,
-          }}>
-            {cat.icon}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{cat.name}</div>
-            <div style={{ fontSize: 13, color: T.muted }}>
-              {new Date(year, month - 1).toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
-            </div>
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: T.red, fontVariantNumeric: "tabular-nums" }}>
-            {fmt(cat.total)}
-          </div>
-        </div>
-
-        <div style={{ height: 1, background: T.brd, margin: "0 16px 16px" }} />
-
-        {/* Body */}
-        <div style={{ padding: "0 16px 24px", overflowY: "auto", maxHeight: "calc(92vh - 120px)" }}>
-          {loading ? (
-            <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
-              <Spinner size={28} color={cat.color || T.em} />
-            </div>
-          ) : txs.length === 0 ? (
-            <EmptyState icon="🔍" title="Нет транзакций" desc="В этом месяце ничего нет" />
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {dates.map(date => (
-                <div key={date}>
-                  {/* Date header */}
-                  <div style={{
-                    fontSize: 12, fontWeight: 600, color: T.muted,
-                    textTransform: "uppercase", letterSpacing: "0.06em",
-                    marginBottom: 8,
-                  }}>
-                    {formatDate(date)}
-                  </div>
-                  {/* Transactions for this date */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {grouped[date].map(tx => (
-                      <div
-                        key={tx.id}
-                        onClick={() => setEditTx(tx)}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 12,
-                          padding: "10px 12px", borderRadius: 12,
-                          background: T.bg2, border: `1px solid ${T.brd}`,
-                          cursor: "pointer", transition: "opacity 0.15s",
-                        }}
-                        onPointerDown={e => e.currentTarget.style.opacity = "0.6"}
-                        onPointerUp={e => e.currentTarget.style.opacity = "1"}
-                        onPointerLeave={e => e.currentTarget.style.opacity = "1"}
-                      >
-                        {/* Account badge */}
-                        <div style={{
-                          fontSize: 11, color: T.muted, background: T.bg3 || T.brd,
-                          borderRadius: 6, padding: "2px 7px", flexShrink: 0, whiteSpace: "nowrap",
-                        }}>
-                          {tx.account_name || "—"}
-                        </div>
-
-                        {/* Description */}
-                        <div style={{
-                          flex: 1, fontSize: 14, color: tx.description ? T.text : T.muted,
-                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                        }}>
-                          {tx.description || "Без описания"}
-                        </div>
-
-                        {/* Amount */}
-                        <div style={{
-                          fontSize: 15, fontWeight: 700,
-                          color: T.red,
-                          fontVariantNumeric: "tabular-nums", flexShrink: 0,
-                        }}>
-                          −{fmt(tx.amount)}
-                        </div>
-
-                        {/* Chevron */}
-                        <div style={{ color: T.muted, fontSize: 12, flexShrink: 0 }}>›</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-
-              {/* Summary footer */}
+        {cat && (
+          <>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 16px 16px" }}>
               <div style={{
-                display: "flex", justifyContent: "space-between",
-                padding: "12px 14px", borderRadius: 12,
-                background: `${cat.color || T.em}12`,
-                border: `1px solid ${cat.color || T.em}30`,
+                width: 44, height: 44, borderRadius: 12,
+                background: `${cat.color || T.em}25`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 22, flexShrink: 0,
               }}>
-                <span style={{ fontSize: 13, color: T.muted }}>{txs.length} операций</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.red, fontVariantNumeric: "tabular-nums" }}>
-                  {fmt(cat.total)}
-                </span>
+                {cat.icon}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{cat.name}</div>
+                <div style={{ fontSize: 13, color: T.muted }}>
+                  {new Date(year, month - 1).toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}
+                </div>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: T.red, fontVariantNumeric: "tabular-nums" }}>
+                {fmt(cat.total)}
               </div>
             </div>
-          )}
-        </div>
+
+            <div style={{ height: 1, background: T.brd, margin: "0 16px 16px" }} />
+
+            {/* Список транзакций */}
+            <div style={{ padding: "0 16px 32px", overflowY: "auto", maxHeight: "calc(92vh - 130px)" }}>
+              {loading ? (
+                <div style={{ display: "flex", justifyContent: "center", padding: 32 }}>
+                  <Spinner size={28} color={cat.color || T.em} />
+                </div>
+              ) : txs.length === 0 ? (
+                <EmptyState icon="🔍" title="Нет транзакций" desc="В этом месяце ничего нет" />
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  {dates.map(date => (
+                    <div key={date}>
+                      <div style={{
+                        fontSize: 11, fontWeight: 700, color: T.muted,
+                        textTransform: "uppercase", letterSpacing: "0.07em",
+                        marginBottom: 8,
+                      }}>
+                        {formatDate(date)}
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {grouped[date].map(tx => (
+                          <div
+                            key={tx.id}
+                            onClick={() => setEditTx(tx)}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 10,
+                              padding: "10px 12px", borderRadius: 12,
+                              background: T.bg2, border: `1px solid ${T.brd}`,
+                              cursor: "pointer",
+                              WebkitTapHighlightColor: "transparent",
+                            }}
+                          >
+                            <div style={{
+                              fontSize: 11, color: T.muted,
+                              background: T.bg3, borderRadius: 6,
+                              padding: "2px 7px", flexShrink: 0, whiteSpace: "nowrap",
+                            }}>
+                              {tx.account_name || "—"}
+                            </div>
+                            <div style={{
+                              flex: 1, fontSize: 14,
+                              color: tx.description ? T.text : T.muted,
+                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            }}>
+                              {tx.description || "Без описания"}
+                            </div>
+                            <div style={{
+                              fontSize: 15, fontWeight: 700, color: T.red,
+                              fontVariantNumeric: "tabular-nums", flexShrink: 0,
+                            }}>
+                              −{fmt(tx.amount)}
+                            </div>
+                            <div style={{ color: T.muted, fontSize: 16, flexShrink: 0 }}>›</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Итог */}
+                  <div style={{
+                    display: "flex", justifyContent: "space-between",
+                    padding: "12px 14px", borderRadius: 12,
+                    background: `${cat.color || T.em}12`,
+                    border: `1px solid ${cat.color || T.em}30`,
+                  }}>
+                    <span style={{ fontSize: 13, color: T.muted }}>{txs.length} операций</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: T.red, fontVariantNumeric: "tabular-nums" }}>
+                      {fmt(txs.reduce((s, tx) => s + tx.amount, 0))}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </BottomSheet>
 
-      {/* Edit transaction modal */}
       <TransactionModal
         open={!!editTx}
         onClose={() => setEditTx(null)}
@@ -155,10 +154,14 @@ function CategorySheet({ cat, year, month, open, onClose, bootstrap, onRefresh }
         bootstrap={bootstrap}
         onSaved={() => {
           setEditTx(null);
-          // Reload transactions in this sheet
-          const { start, end } = monthRange(year, month);
-          get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
-            .then(r => setTxs(r.transactions || []));
+          prevCatId.current = null; // сбросить кеш → перезагрузить список
+          if (cat) {
+            setLoading(true);
+            const { start, end } = monthRange(year, month);
+            get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
+              .then(r => setTxs(r.transactions || []))
+              .finally(() => setLoading(false));
+          }
           onRefresh?.();
         }}
       />
@@ -209,7 +212,7 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
     <div style={{ padding: "16px 16px calc(88px + env(safe-area-inset-bottom))" }}>
       <MonthNav year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m); }} />
 
-      {/* Total */}
+      {/* Итого */}
       <div style={{ textAlign: "center", margin: "20px 0 16px" }}>
         <div style={{ fontSize: 12, color: T.muted }}>Итого расходов</div>
         <div style={{ fontSize: 32, fontWeight: 800, color: T.red, fontVariantNumeric: "tabular-nums" }}>
@@ -217,7 +220,7 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         </div>
       </div>
 
-      {/* Donut + Legend */}
+      {/* Donut + легенда */}
       {!loading && donutData.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16 }}>
           <DonutChart data={donutData} size={140} onClick={c => setSelectedCat(c.item)} />
@@ -241,12 +244,12 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         </div>
       )}
 
-      {/* Budgets button */}
+      {/* Бюджеты */}
       <Button variant="ghost" full style={{ marginBottom: 16 }} onClick={() => setShowBudgets(true)}>
         📐 Бюджеты
       </Button>
 
-      {/* Category list */}
+      {/* Список категорий */}
       {loading ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {[1,2,3,4].map(i => <Skeleton key={i} height={70} borderRadius={14} />)}
@@ -261,28 +264,24 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
             const overBudget = pct !== null && pct > 100;
 
             return (
-              <Card
-                key={cat.id}
-                accent={cat.color || T.em}
-                onClick={() => setSelectedCat(cat)}
-              >
+              <Card key={cat.id} accent={cat.color || T.em} onClick={() => setSelectedCat(cat)}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 10,
                     background: `${cat.color || T.em}20`,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
-                    flexShrink: 0,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 18, flexShrink: 0,
                   }}>
                     {cat.icon}
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: budget ? 6 : 0 }}>
                       <span style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>{cat.name}</span>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ fontSize: 14, color: overBudget ? T.red : T.red, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ fontSize: 14, color: T.red, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
                           {fmt(cat.total)}
                         </span>
-                        <span style={{ fontSize: 14, color: T.muted }}>›</span>
+                        <span style={{ fontSize: 16, color: T.muted }}>›</span>
                       </div>
                     </div>
                     {budget && (
@@ -301,7 +300,7 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         </div>
       )}
 
-      {/* Category drill-down */}
+      {/* Drill-down — всегда смонтирован, open управляет видимостью */}
       <CategorySheet
         cat={selectedCat}
         year={year}
