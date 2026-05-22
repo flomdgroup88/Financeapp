@@ -56,7 +56,8 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
       const params = new URLSearchParams({
         start_date: start, end_date: end,
         limit: LIMIT, offset: off,
-        ...(typeFilter !== "all" ? { type: typeFilter } : {}),
+        ...(typeFilter === "goal"    ? { goal: "1" }           :
+            typeFilter !== "all"    ? { type: typeFilter }     : {}),
         ...(search.trim() ? { search: search.trim() } : {}),
       });
       const data = await get(`/api/transactions?${params}`);
@@ -134,6 +135,7 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
           { value: "expense", label: "Расходы" },
           { value: "income", label: "Доходы" },
           { value: "transfer", label: "Переводы" },
+          { value: "goal", label: "Цели" },
         ]}
       />
 
@@ -195,8 +197,9 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
 
 function TxRow({ tx, onEdit }) {
   const [pressed, setPressed] = useState(false);
+  const isGoal = Boolean(tx.goal_id);
   const typeColors = { expense: T.red, income: T.em, transfer: T.blue };
-  const color = typeColors[tx.type] || T.muted;
+  const color = isGoal ? T.gold : (typeColors[tx.type] || T.muted);
 
   return (
     <div
@@ -216,7 +219,7 @@ function TxRow({ tx, onEdit }) {
         background: `${tx.category_color || color}20`,
         display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18,
       }}>
-        {tx.category_icon || (tx.type === "income" ? "💚" : tx.type === "transfer" ? "↔️" : "💸")}
+        {tx.category_icon || (isGoal ? "🎯" : tx.type === "income" ? "💚" : tx.type === "transfer" ? "↔️" : "💸")}
       </div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 13, color: T.text, fontWeight: 500 }}>
@@ -228,7 +231,7 @@ function TxRow({ tx, onEdit }) {
       </div>
       <div style={{ textAlign: "right" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>
-          {tx.type === "expense" ? "-" : tx.type === "income" ? "+" : "→"}{fmt(tx.amount)}
+          {isGoal ? "→" : tx.type === "expense" ? "-" : tx.type === "income" ? "+" : "→"}{fmt(tx.amount)}
         </div>
       </div>
     </div>
