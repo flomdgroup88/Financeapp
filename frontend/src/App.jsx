@@ -27,10 +27,16 @@ import { Toast, AchievementToast } from "./components/ui";
 import useXP             from "./hooks/useXP";
 import useAchievements   from "./hooks/useAchievements";
 import useBootstrap      from "./hooks/useBootstrap";
+import useOffline        from "./hooks/useOffline";
+import OfflineBanner     from "./components/OfflineBanner";
 
 import { get } from "./api";
 
 injectCSS("app-scroll", `
+  @keyframes offlineBannerIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
   .screen-enter { animation: fadeIn 0.2s ease; }
 `);
 
@@ -41,6 +47,9 @@ export default function App() {
 
   // Bootstrap
   const { data: bootstrap, loading: bsLoading, refresh: refreshBootstrap, patch: patchBootstrap } = useBootstrap();
+
+  // Offline status
+  const { isOffline } = useOffline();
 
   // XP
   const xpData = useXP(bootstrap?.gamification);
@@ -192,6 +201,9 @@ export default function App() {
         onAdd={() => openTx(null)}
         onProfile={() => setProfile(true)}
       />
+
+      {/* Offline banner — global, показывается на всех вкладках */}
+      <OfflineBanner isOffline={isOffline} />
 
       {/* Screens */}
       <div className="screen-enter">
