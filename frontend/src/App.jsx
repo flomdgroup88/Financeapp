@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { T } from "./theme";
-import { hasToken } from "./api";
+import { hasToken, get } from "./api";
 import { injectCSS } from "./components/ui";
 
 import AuthScreen        from "./screens/AuthScreen";
@@ -60,6 +60,18 @@ export default function App() {
   const [achToast, setAchToast]     = useState(null);
   const [txToast, setTxToast]       = useState(null);
   const [recentTransactions, setRecentTransactions] = useState([]);
+
+  // Подгружаем последние транзакции при старте — чтобы LiveFeed сразу показывался
+  useEffect(() => {
+    if (!bootstrap) return;
+    get("/api/transactions?limit=10&offset=0")
+      .then(res => {
+        if (res?.transactions?.length) {
+          setRecentTransactions(res.transactions.slice(0, 10));
+        }
+      })
+      .catch(() => {});
+  }, [!!bootstrap]);
 
   function addToast(msg, type = "info") {
     const id = Date.now();
