@@ -30,13 +30,13 @@ injectCSS("vault-base", `
     to   { transform: translateY(100%); opacity: 0; }
   }
   @keyframes toastIn {
-    0%   { transform: translateY(100px); opacity: 0; }
-    60%  { transform: translateY(-8px);  opacity: 1; }
+    0%   { transform: translateY(-80px); opacity: 0; }
+    60%  { transform: translateY(6px);   opacity: 1; }
     100% { transform: translateY(0);     opacity: 1; }
   }
   @keyframes toastOut {
-    from { transform: translateY(0);    opacity: 1; }
-    to   { transform: translateY(100px); opacity: 0; }
+    from { transform: translateY(0);     opacity: 1; }
+    to   { transform: translateY(-80px); opacity: 0; }
   }
   @keyframes fabPulse {
     0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
@@ -378,7 +378,9 @@ export function Toast({ message, type = "info", onClose }) {
   return (
     <div
       style={{
-        position: "fixed", bottom: 90, left: 16, right: 16, zIndex: 2000,
+        position: "fixed",
+        top: "calc(env(safe-area-inset-top) + 12px)",
+        left: 16, right: 16, zIndex: 2000,
         background: T.bg1, borderRadius: 14, border: `1px solid ${color}40`,
         padding: "12px 16px", display: "flex", alignItems: "center", gap: 12,
         boxShadow: `0 8px 32px rgba(0,0,0,0.5)`,
@@ -422,7 +424,9 @@ export function AchievementToast({ achievement, onClose }) {
   return (
     <div
       style={{
-        position: "fixed", bottom: 90, left: 16, right: 16, zIndex: 2000,
+        position: "fixed",
+        top: "calc(env(safe-area-inset-top) + 12px)",
+        left: 16, right: 16, zIndex: 2000,
         background: T.bg1, borderRadius: 16,
         border: `1px solid ${T.gold}50`,
         padding: "14px 16px", display: "flex", alignItems: "center", gap: 14,
