@@ -171,6 +171,12 @@ CREATE TABLE IF NOT EXISTS recurring_transactions (
 CREATE INDEX IF NOT EXISTS idx_goal_user ON savings_goals(user_id);
 CREATE INDEX IF NOT EXISTS idx_rec_user  ON recurring_transactions(user_id);
 
+-- Составные индексы: покрывают WHERE user_id=? ORDER BY sort_order/next_date
+-- без этого SQLite делал лишнюю сортировку в памяти при каждом запросе
+CREATE INDEX IF NOT EXISTS idx_acc_user_sort  ON accounts(user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_cat_user_sort  ON categories(user_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_sub_user_date  ON subscriptions(user_id, next_date);
+
 CREATE TABLE IF NOT EXISTS sessions (
     token      TEXT PRIMARY KEY,
     user_id    TEXT NOT NULL,
@@ -314,6 +320,10 @@ def migrate_db():
         "CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date)",
         "ALTER TABLE transactions ADD COLUMN goal_id INTEGER REFERENCES savings_goals(id) ON DELETE SET NULL",
+        # Составные индексы — убирают TEMP B-TREE сортировку для частых запросов
+        "CREATE INDEX IF NOT EXISTS idx_acc_user_sort ON accounts(user_id, sort_order)",
+        "CREATE INDEX IF NOT EXISTS idx_cat_user_sort ON categories(user_id, sort_order)",
+        "CREATE INDEX IF NOT EXISTS idx_sub_user_date ON subscriptions(user_id, next_date)",
     ]
     for sql in migrations:
         try:
