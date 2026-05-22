@@ -60,8 +60,8 @@ def goal_deposit(gid):
     q("UPDATE savings_goals SET saved_amount=? WHERE id=? AND user_id=?", (new_saved, gid, uid()))
     if acc_id:
         q("UPDATE accounts SET balance=balance-? WHERE id=? AND user_id=?", (amount, acc_id, uid()))
-        q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date) VALUES(?,?,NULL,?,?,?,?)",
-          (uid(), acc_id, amount, "expense", f"Цель: {goal['name']}", tx_date))
+        q("INSERT INTO transactions(user_id,account_id,category_id,amount,type,description,date,goal_id) VALUES(?,?,NULL,?,?,?,?,?)",
+          (uid(), acc_id, amount, "expense", f"Цель: {goal['name']}", tx_date, gid))
     commit()
     return jsonify({"ok": True, "saved_amount": new_saved})
 
