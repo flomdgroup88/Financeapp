@@ -14,6 +14,11 @@ import os
 BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
 SESSION_DAYS = 30
 
+# Кэш засеянных пользователей — храним в памяти, чтобы не делать SELECT в БД
+# при каждом запросе. При перезапуске сервера сбрасывается, но seed_user_if_new()
+# всё равно безопасно вызвать повторно — она проверит БД и сразу выйдет.
+_seeded_users: set = set()
+
 # limiter инициализируется позже через init_limiter(), чтобы избежать
 # циклического импорта (app.py импортирует auth.py, auth.py не должен импортировать app.py)
 _limiter = None
@@ -55,10 +60,16 @@ def verify_telegram_init_data(init_data_raw: str):
 # Засев начальных данных для нового пользователя
 # ──────────────────────────────────────────────
 def seed_user_if_new(user_id: str):
+    # Быстрая проверка по кэшу — если пользователь уже засеян в этом
+    # процессе, не идём в БД вообще.
+    if user_id in _seeded_users:
+        return
+
     from datetime import date
     db = get_db()
 
     if db.execute("SELECT 1 FROM accounts WHERE user_id=? LIMIT 1", (user_id,)).fetchone():
+        _seeded_users.add(user_id)  # запоминаем, чтобы следующий запрос пропустил даже этот SELECT
         return
 
     db.execute(
@@ -121,6 +132,7 @@ def seed_user_if_new(user_id: str):
             )
 
     commit()
+    _seeded_users.add(user_id)  # пользователь успешно засеян — кэшируем
 
 
 # ──────────────────────────────────────────────
