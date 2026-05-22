@@ -9,12 +9,14 @@ import {
 } from "../components/ui";
 import { MONTHS_SHORT } from "../constants";
 import ShakeInsight from "../components/ShakeInsight";
+import FinanceWrapped from "../components/FinanceWrapped";
 
 export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings, onNavigate }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [showShake, setShowShake] = useState(false);
+  const [showWrapped, setShowWrapped] = useState(false);
   const [stats, setStats] = useState(null);
   const [comparison, setComparison] = useState(null);
   const [budgets, setBudgets] = useState([]);
@@ -275,6 +277,18 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
           onClose={() => setShowShake(false)}
         />
       )}
+      {/* FinanceWrapped overlay */}
+      {showWrapped && (
+        <FinanceWrapped
+          stats={stats}
+          comparison={comparison}
+          bootstrap={bootstrap}
+          rates={rates}
+          year={year}
+          month={month}
+          onClose={() => setShowWrapped(false)}
+        />
+      )}
 
       {/* Offline banner теперь глобальный в App.jsx */}
       {/* Header balance */}
@@ -283,19 +297,33 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
           <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
             Общий баланс
           </div>
-          <button
-            onClick={() => setShowShake(true)}
-            title="Встряхни для инсайта"
-            style={{
-              background: "linear-gradient(135deg, #064e3b, #052e16)",
-              border: "1px solid #10b98140",
-              color: "#10B981", borderRadius: 12,
-              padding: "5px 12px", fontSize: 12, fontWeight: 700,
-              cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-            }}
-          >
-            🪄 Инсайт
-          </button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => setShowWrapped(true)}
+              style={{
+                background: "linear-gradient(135deg, #1e1240, #120d2a)",
+                border: "1px solid #8B5CF640",
+                color: "#A78BFA", borderRadius: 12,
+                padding: "5px 12px", fontSize: 12, fontWeight: 700,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+              }}
+            >
+              ✨ Wrapped
+            </button>
+            <button
+              onClick={() => setShowShake(true)}
+              title="Встряхни для инсайта"
+              style={{
+                background: "linear-gradient(135deg, #064e3b, #052e16)",
+                border: "1px solid #10b98140",
+                color: "#10B981", borderRadius: 12,
+                padding: "5px 12px", fontSize: 12, fontWeight: 700,
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+              }}
+            >
+              🪄 Инсайт
+            </button>
+          </div>
         </div>
         <div style={{ fontSize: 36, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
           <AnimatedNumber value={Math.round(activeBalance)} suffix=" ₽" />
