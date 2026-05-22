@@ -23,7 +23,7 @@ function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
     if (!cat) return;
     setLoading(true);
     const { start, end } = monthRange(year, month);
-    get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
+    get(`/api/transactions?category_id=${cat.id}&type=expense&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
       .then(r => setTxs(r.transactions || []))
       .catch(() => setTxs([]))
       .finally(() => setLoading(false));
@@ -193,7 +193,7 @@ function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
         </div>
       </div>
 
-      {/* Edit transaction */}
+      {/* Edit transaction — вне sheet с transform, чтобы position:fixed работал корректно */}
       <TransactionModal
         open={!!editTx}
         onClose={() => setEditTx(null)}
@@ -203,7 +203,7 @@ function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
           setEditTx(null);
           setLoading(true);
           const { start, end } = monthRange(year, month);
-          get(`/api/transactions?category_id=${cat.id}&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
+          get(`/api/transactions?category_id=${cat.id}&type=expense&start_date=${start}&end_date=${end}&limit=200&sort_by=date&sort_dir=desc`)
             .then(r => setTxs(r.transactions || []))
             .finally(() => setLoading(false));
           onRefresh?.();
