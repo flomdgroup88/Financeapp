@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     description  TEXT,
     date         TEXT NOT NULL DEFAULT (date('now')),
     created_at   TEXT DEFAULT (datetime('now')),
-    paired_tx_id INTEGER
+    paired_tx_id INTEGER,
+    goal_id      INTEGER REFERENCES savings_goals(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -310,6 +311,7 @@ def migrate_db():
         )""",
         "CREATE INDEX IF NOT EXISTS idx_sess_user ON sessions(user_id)",
         "CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date)",
+        "ALTER TABLE transactions ADD COLUMN goal_id INTEGER REFERENCES savings_goals(id) ON DELETE SET NULL",
     ]
     for sql in migrations:
         try:
