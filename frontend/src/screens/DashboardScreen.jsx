@@ -379,8 +379,8 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
         </div>
       )}
 
-      {/* Live feed */}
-      {recentTransactions && recentTransactions.length > 0 && (
+      {/* Live feed — только для текущего месяца */}
+      {isCurrentMonth && recentTransactions && recentTransactions.length > 0 && (
         <div style={{ padding: "16px 16px 0" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
             <div
