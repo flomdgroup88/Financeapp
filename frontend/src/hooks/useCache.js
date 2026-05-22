@@ -85,5 +85,10 @@ export default function useCache() {
     }
   }
 
-  return { getCache, getOfflineCache, invalidate };
+  async function setCache(key, value) {
+    memCache.set(key, { value, ts: Date.now() });
+    await idbSet(key, value);
+  }
+
+  return { getCache, getOfflineCache, invalidate, setCache };
 }
