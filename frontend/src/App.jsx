@@ -22,7 +22,7 @@ import PlannedModal      from "./modals/PlannedModal";
 import TopBar            from "./components/TopBar";
 import BottomNav         from "./components/BottomNav";
 import XPGainPopup       from "./components/XPGainPopup";
-import { Toast, AchievementToast } from "./components/ui";
+import { Toast, AchievementToast, TransactionToast } from "./components/ui";
 
 import useXP             from "./hooks/useXP";
 import useAchievements   from "./hooks/useAchievements";
@@ -58,6 +58,8 @@ export default function App() {
   const [toasts, setToasts]         = useState([]);
   const [xpPopup, setXpPopup]       = useState(null);
   const [achToast, setAchToast]     = useState(null);
+  const [txToast, setTxToast]       = useState(null);
+  const [recentTransactions, setRecentTransactions] = useState([]);
 
   function addToast(msg, type = "info") {
     const id = Date.now();
@@ -104,13 +106,16 @@ export default function App() {
       if (newStreak >= 7)  achievements.checkAndUnlock("streak_7");
       if (newStreak >= 14) achievements.checkAndUnlock("streak_14");
       if (newStreak >= 30) achievements.checkAndUnlock("streak_30");
+
+      // Живая лента + тост
+      setRecentTransactions(prev => [txData, ...prev].slice(0, 20));
+      setTxToast(txData);
     }
     // Транзакция меняет только балансы счетов — патчим только accounts
     try {
       const res = await get("/api/accounts");
       patchBootstrap({ accounts: res.accounts });
     } catch { refreshBootstrap(); }
-    addToast("Транзакция сохранена", "success");
   }
 
   function onAccountSaved() {
@@ -221,6 +226,7 @@ export default function App() {
             onOpenGoals={() => setGoalModal(true)}
             onOpenSettings={() => setSettingsModal(true)}
             onNavigate={(tab) => { setProfile(false); setTab(tab); }}
+            recentTransactions={recentTransactions}
           />
         ) : tab === "history" ? (
           <HistoryScreen
@@ -321,6 +327,13 @@ export default function App() {
         <AchievementToast
           achievement={achToast}
           onClose={() => setAchToast(null)}
+        />
+      )}
+
+      {txToast && (
+        <TransactionToast
+          tx={txToast}
+          onDone={() => setTxToast(null)}
         />
       )}
 
