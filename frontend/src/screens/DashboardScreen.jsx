@@ -8,11 +8,13 @@ import {
   DonutChart, BarChart, ProgressBar, EmptyState
 } from "../components/ui";
 import { MONTHS_SHORT } from "../constants";
+import ShakeInsight from "../components/ShakeInsight";
 
 export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings, onNavigate }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [showShake, setShowShake] = useState(false);
   const [stats, setStats] = useState(null);
   const [comparison, setComparison] = useState(null);
   const [budgets, setBudgets] = useState([]);
@@ -263,11 +265,37 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
 
   return (
     <div style={{ padding: "0 0 calc(88px + env(safe-area-inset-bottom))" }}>
+      {/* ShakeInsight overlay */}
+      {showShake && (
+        <ShakeInsight
+          stats={stats}
+          comparison={comparison}
+          bootstrap={bootstrap}
+          rates={rates}
+          onClose={() => setShowShake(false)}
+        />
+      )}
+
       {/* Offline banner теперь глобальный в App.jsx */}
       {/* Header balance */}
       <div style={{ padding: "20px 16px 0" }}>
-        <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
-          Общий баланс
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
+            Общий баланс
+          </div>
+          <button
+            onClick={() => setShowShake(true)}
+            title="Встряхни для инсайта"
+            style={{
+              background: "linear-gradient(135deg, #064e3b, #052e16)",
+              border: "1px solid #10b98140",
+              color: "#10B981", borderRadius: 12,
+              padding: "5px 12px", fontSize: 12, fontWeight: 700,
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+            }}
+          >
+            🪄 Инсайт
+          </button>
         </div>
         <div style={{ fontSize: 36, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
           <AnimatedNumber value={Math.round(activeBalance)} suffix=" ₽" />
