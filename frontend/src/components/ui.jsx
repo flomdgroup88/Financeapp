@@ -66,6 +66,45 @@ injectCSS("vault-base", `
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+  @keyframes feedItemIn {
+    0%   { transform: translateY(-52px); opacity: 0; max-height: 0; }
+    40%  { opacity: 1; }
+    100% { transform: translateY(0);     opacity: 1; max-height: 80px; }
+  }
+  @keyframes feedItemOut {
+    from { opacity: 1; max-height: 80px; margin-bottom: 6px; }
+    to   { opacity: 0; max-height: 0;    margin-bottom: 0; padding-top: 0; padding-bottom: 0; }
+  }
+  @keyframes txToastIn {
+    0%   { transform: translateY(80px) scale(0.95); opacity: 0; }
+    60%  { transform: translateY(-6px)  scale(1.01); opacity: 1; }
+    100% { transform: translateY(0)     scale(1);    opacity: 1; }
+  }
+  @keyframes txToastOut {
+    from { transform: translateY(0);    opacity: 1; }
+    to   { transform: translateY(-60px); opacity: 0; }
+  }
+  @keyframes balWaveRed {
+    0%   { background: transparent; }
+    15%  { background: rgba(239,68,68,0.20); border-radius: 10px; }
+    100% { background: transparent; }
+  }
+  @keyframes balWaveGreen {
+    0%   { background: transparent; }
+    15%  { background: rgba(16,185,129,0.20); border-radius: 10px; }
+    100% { background: transparent; }
+  }
+  @keyframes livePulse {
+    0%,100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.3; transform: scale(0.75); }
+  }
+  .bal-wave-red   { animation: balWaveRed   0.75s ease-out; }
+  .bal-wave-green { animation: balWaveGreen 0.75s ease-out; }
+  .feed-item-enter { animation: feedItemIn  0.38s cubic-bezier(0.34,1.56,0.64,1) both; }
+  .feed-item-exit  { animation: feedItemOut 0.28s ease forwards; }
+  .tx-toast-in     { animation: txToastIn   0.42s cubic-bezier(0.34,1.56,0.64,1) both; }
+  .tx-toast-out    { animation: txToastOut  0.32s ease forwards; }
+  .live-pulse-dot  { animation: livePulse 1.6s ease-in-out infinite; }
 `);
 
 // ── Button ────────────────────────────────────────────────────────────
@@ -689,6 +728,145 @@ export function EmptyState({ icon = "📊", title, desc }) {
       <div style={{ fontSize: 40, marginBottom: 12 }}>{icon}</div>
       <div style={{ fontSize: 16, fontWeight: 600, color: T.text, marginBottom: 6 }}>{title}</div>
       {desc && <div style={{ fontSize: 13, color: T.muted }}>{desc}</div>}
+    </div>
+  );
+}
+
+// ── TransactionToast ──────────────────────────────────────────────────
+export function TransactionToast({ tx, onDone }) {
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (navigator.vibrate) {
+      const amt = Math.abs(tx.amount || 0);
+      navigator.vibrate(amt > 2000 ? [25, 80, 40] : amt > 500 ? [30] : [15]);
+    }
+    const t = setTimeout(() => {
+      setLeaving(true);
+      setTimeout(onDone, 350);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const isExpense = tx.type === "expense";
+  const amtColor  = isExpense ? T.red : T.em;
+  const amtPrefix = isExpense ? "−" : "+";
+  const amtStr    = `${amtPrefix}${Math.abs(tx.amount || 0).toLocaleString("ru-RU")} ₽`;
+
+  return (
+    <div
+      className={leaving ? "tx-toast-out" : "tx-toast-in"}
+      style={{
+        position: "fixed",
+        bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)",
+        left: 12, right: 12,
+        zIndex: 1500,
+        background: T.bg1,
+        borderRadius: 16,
+        border: `1px solid ${amtColor}35`,
+        padding: "13px 16px",
+        display: "flex", alignItems: "center", gap: 12,
+        cursor: "pointer",
+        maxWidth: 480,
+        margin: "0 auto",
+      }}
+      onClick={() => { setLeaving(true); setTimeout(onDone, 350); }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 12,
+        background: `${amtColor}18`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, flexShrink: 0,
+      }}>
+        {tx.category_icon || (isExpense ? "💸" : "💰")}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: T.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {tx.description || tx.category_name || (isExpense ? "Расход" : "Доход")}
+        </div>
+        <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+          {tx.category_name || (isExpense ? "Расход" : "Доход")}
+        </div>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 800, color: amtColor, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+        {amtStr}
+      </div>
+    </div>
+  );
+}
+
+// ── LiveFeed ──────────────────────────────────────────────────────────
+const FEED_MAX = 5;
+
+export function LiveFeed({ transactions }) {
+  const [items, setItems] = useState([]);
+  const [exiting, setExiting] = useState(new Set());
+  const prevLen = useRef(0);
+
+  useEffect(() => {
+    if (!transactions || transactions.length === 0) return;
+    if (transactions.length > prevLen.current) {
+      const newTx = transactions[0];
+      const id    = newTx.id || Date.now();
+
+      setItems(prev => {
+        const next = [{ ...newTx, _feedId: id }, ...prev.filter(x => x._feedId !== id)];
+        if (next.length > FEED_MAX) {
+          const toExit = next.slice(FEED_MAX).map(x => x._feedId);
+          setExiting(e => { const s = new Set(e); toExit.forEach(x => s.add(x)); return s; });
+          setTimeout(() => {
+            setItems(cur => cur.filter(x => !toExit.includes(x._feedId)));
+            setExiting(e => { const s = new Set(e); toExit.forEach(x => s.delete(x)); return s; });
+          }, 300);
+        }
+        return next.slice(0, FEED_MAX + 2);
+      });
+    }
+    prevLen.current = transactions.length;
+  }, [transactions?.length]);
+
+  if (items.length === 0) return null;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {items.map(tx => {
+        const isExpense = tx.type === "expense";
+        const amtColor  = isExpense ? T.red : T.em;
+        const amtPrefix = isExpense ? "−" : "+";
+        const leaving   = exiting.has(tx._feedId);
+        return (
+          <div
+            key={tx._feedId}
+            className={leaving ? "feed-item-exit" : "feed-item-enter"}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              background: T.bg1, border: `1px solid ${T.brdDim}`,
+              borderRadius: 12, padding: "10px 12px",
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              width: 34, height: 34, borderRadius: 10,
+              background: `${amtColor}18`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 16, flexShrink: 0,
+            }}>
+              {tx.category_icon || (isExpense ? "💸" : "💰")}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {tx.description || tx.category_name || (isExpense ? "Расход" : "Доход")}
+              </div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>
+                {tx.category_name} · сейчас
+              </div>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: amtColor, fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
+              {amtPrefix}{Math.abs(tx.amount || 0).toLocaleString("ru-RU")} ₽
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
