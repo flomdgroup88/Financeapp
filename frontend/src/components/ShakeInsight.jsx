@@ -166,6 +166,30 @@ function buildInsights({ stats, comparison, bootstrap, rates }) {
     }
   }
 
+  // --- Когда кончатся деньги ---
+  if (dailyAvg > 0) {
+    const activeBalance = accounts
+      .filter(a => !a.is_reserve)
+      .reduce((s, a) => s + toRub(a.balance, a.currency, rates), 0);
+    if (activeBalance > 0) {
+      const daysLeft = Math.floor(activeBalance / dailyAvg);
+      if (daysLeft <= 45) {
+        const icon = daysLeft <= 7 ? "🚨" : daysLeft <= 14 ? "🔴" : daysLeft <= 30 ? "🟡" : "📆";
+        const type = daysLeft <= 7 ? "danger" : daysLeft <= 14 ? "danger" : daysLeft <= 30 ? "warning" : "info";
+        const urgency = daysLeft <= 7
+          ? `Срочно! Осталось ${fmt(Math.round(activeBalance))}`
+          : `При трате ${fmt(Math.round(dailyAvg))} в день`;
+        insights.push({
+          id: "money-runout", icon,
+          text: `Деньги кончатся через ${daysLeft} дн.`,
+          sub: urgency,
+          type,
+          priority: daysLeft <= 14 ? 1 : daysLeft <= 30 ? 2 : 3,
+        });
+      }
+    }
+  }
+
   // --- Топ-категория как % от дохода ---
   if (stats?.by_category?.length > 0 && totalInc > 0) {
     const top = stats.by_category[0];
