@@ -339,19 +339,28 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
           </div>
         </div>
         <div style={{ fontSize: 36, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
+          {!bootstrap ? (
+            <Skeleton width={180} height={40} borderRadius={10} style={{ marginLeft: -6 }} />
+          ) : (
           <span
             className={balanceWave === "red" ? "bal-wave-red" : balanceWave === "green" ? "bal-wave-green" : ""}
             style={{ display: "inline-block", padding: "2px 6px", marginLeft: -6, borderRadius: 10 }}
           >
             <AnimatedNumber value={Math.round(activeBalance)} suffix=" ₽" />
           </span>
+          )}
         </div>
-        {reserveBalance > 0 && (
+        {!bootstrap ? (
+          <Skeleton width={120} height={14} borderRadius={6} style={{ marginTop: 8 }} />
+        ) : reserveBalance > 0 ? (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
             + <span style={{ color: T.gold }}>{fmt(reserveBalance)}</span> резервный
           </div>
-        )}
+        ) : null}
         <div style={{ marginTop: 4, display: "flex", alignItems: "center", gap: 8 }}>
+          {!bootstrap ? (
+            <Skeleton width={100} height={22} borderRadius={6} />
+          ) : (
           <div style={{
             fontSize: 12, padding: "3px 8px", borderRadius: 6,
             background: compChange >= 0 ? T.redDim : T.emDim,
@@ -359,6 +368,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
           }}>
             {compChange >= 0 ? "▲" : "▼"} {Math.abs(compChange)}% к прошлому
           </div>
+          )}
         </div>
       </div>
 
@@ -394,7 +404,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
         ].map(item => (
           <Card key={item.label} accent={item.color} style={{ padding: 12 }} onClick={() => onNavigate && onNavigate(item.tab)}>
             <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{item.label}</div>
-            {loading ? <Skeleton height={20} /> : (
+            {loading || !bootstrap ? <Skeleton height={20} /> : (
               <div style={{ fontSize: 15, fontWeight: 700, color: item.color, fontVariantNumeric: "tabular-nums", lineHeight: 1.2 }}>
                 {fmt(item.value)}
               </div>
@@ -412,7 +422,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
       <div style={{ padding: "16px 16px 0" }}>
         <Card>
           <div style={{ fontSize: 13, color: T.muted, marginBottom: 12, fontWeight: 600 }}>Расходы по дням</div>
-          {loading ? <Skeleton height={80} /> : (
+          {loading || !bootstrap ? <Skeleton height={80} /> : (
             <BarChart data={dailyData} height={80} color={T.em} />
           )}
           {/* Day labels */}
