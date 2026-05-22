@@ -47,15 +47,13 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
     async function loadStats() {
       setLoading(true);
       try {
-        const [s, c, b] = await Promise.all([
-          get(`/api/stats/monthly?year=${year}&month=${month}`),
-          get(`/api/stats/comparison`),
-          get(`/api/budget-limits?year=${year}&month=${month}`),
-        ]);
-        setStats(s);
-        setComparison(c);
-        setBudgets(b.budget_limits || []);
-      } catch {}
+        const data = await get(`/api/dashboard?year=${year}&month=${month}`);
+        setStats(data.stats);
+        setComparison(data.comparison);
+        setBudgets(data.budget_limits || []);
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      }
       setLoading(false);
     }
     loadStats();
