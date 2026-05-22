@@ -6,7 +6,7 @@ export default function useBootstrap() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const { getCache, getOfflineCache, invalidate } = useCache();
+  const { getCache, getOfflineCache, invalidate, setCache } = useCache();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -32,7 +32,18 @@ export default function useBootstrap() {
     load();
   }, [load]);
 
+  // Точечное обновление: сливает partial в текущий стейт и обновляет кэш.
+  // Не делает сетевой запрос — данные уже получены снаружи.
+  const patch = useCallback((partial) => {
+    setData(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, ...partial };
+      setCache("bootstrap", next);
+      return next;
+    });
+  }, []);
+
   useEffect(() => { load(); }, [load]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, refresh, patch };
 }
