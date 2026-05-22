@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { T } from "../theme";
 import { get } from "../api";
 import { fmt, toRub, monthRange, prevMonth } from "../utils";
+import useCache from "../hooks/useCache";
 import {
   Card, Skeleton, MonthNav, Ticker, AnimatedNumber,
   DonutChart, BarChart, ProgressBar, EmptyState
@@ -16,6 +17,8 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   const [comparison, setComparison] = useState(null);
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isOffline, setIsOffline] = useState(false);
+  const { getCache, getOfflineCache } = useCache();
 
   const usdRate = bootstrap?.usd_rate || 90;
   const rates = bootstrap || { usd_rate: 90 };
@@ -46,13 +49,25 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   useEffect(() => {
     async function loadStats() {
       setLoading(true);
+      const cacheKey = `dashboard-${year}-${String(month).padStart(2, "0")}`;
       try {
-        const data = await get(`/api/dashboard?year=${year}&month=${month}`);
+        const data = await getCache(cacheKey, () =>
+          get(`/api/dashboard?year=${year}&month=${month}`)
+        );
+        setIsOffline(false);
         setStats(data.stats);
         setComparison(data.comparison);
         setBudgets(data.budget_limits || []);
       } catch (err) {
         console.error("Dashboard load error:", err);
+        // Сеть недоступна — пробуем данные из IndexedDB (offline-fallback)
+        const cached = await getOfflineCache(cacheKey);
+        if (cached) {
+          setIsOffline(true);
+          setStats(cached.stats);
+          setComparison(cached.comparison);
+          setBudgets(cached.budget_limits || []);
+        }
       }
       setLoading(false);
     }
@@ -248,6 +263,19 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
 
   return (
     <div style={{ padding: "0 0 calc(88px + env(safe-area-inset-bottom))" }}>
+      {/* Offline banner */}
+      {isOffline && (
+        <div style={{
+          margin: "8px 16px 0", padding: "8px 12px", borderRadius: 10,
+          background: `${T.gold}18`, border: `1px solid ${T.gold}40`,
+          display: "flex", alignItems: "center", gap: 8,
+        }}>
+          <span style={{ fontSize: 16 }}>📡</span>
+          <span style={{ fontSize: 12, color: T.gold, fontWeight: 600 }}>
+            Нет сети — показаны данные из кэша
+          </span>
+        </div>
+      )}
       {/* Header balance */}
       <div style={{ padding: "20px 16px 0" }}>
         <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>
