@@ -18,6 +18,8 @@ def get_db():
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA journal_mode=WAL")
         db.execute("PRAGMA foreign_keys=ON")
+        db.execute("PRAGMA synchronous=NORMAL")
+        db.execute("PRAGMA cache_size=-32000")
     return db
 
 def close_db(exc):
