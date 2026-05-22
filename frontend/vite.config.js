@@ -35,6 +35,14 @@ export default defineConfig({
   build: {
     outDir: '../static/dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-ui':    ['react/jsx-runtime'],
+        },
+      },
+    },
   },
   server: {
     proxy: {
