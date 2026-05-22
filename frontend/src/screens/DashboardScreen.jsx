@@ -1,17 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { T } from "../theme";
 import { get } from "../api";
 import { fmt, toRub, monthRange, prevMonth } from "../utils";
 import useCache from "../hooks/useCache";
 import {
   Card, Skeleton, MonthNav, Ticker, AnimatedNumber,
-  DonutChart, BarChart, ProgressBar, EmptyState
+  DonutChart, BarChart, ProgressBar, EmptyState, LiveFeed
 } from "../components/ui";
 import { MONTHS_SHORT } from "../constants";
 import ShakeInsight from "../components/ShakeInsight";
 import FinanceWrapped from "../components/FinanceWrapped";
 
-export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings, onNavigate }) {
+export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoals, onOpenSettings, onNavigate, recentTransactions }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -22,7 +22,20 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isOffline, setIsOffline] = useState(false);
+  const [balanceWave, setBalanceWave] = useState(null); // "red" | "green" | null
   const { getCache, getOfflineCache } = useCache();
+
+  const prevTxLen = useRef(0);
+  useEffect(() => {
+    if (!recentTransactions || recentTransactions.length === 0) return;
+    if (recentTransactions.length > prevTxLen.current) {
+      const latest = recentTransactions[0];
+      const wave = latest.type === "expense" ? "red" : "green";
+      setBalanceWave(wave);
+      setTimeout(() => setBalanceWave(null), 800);
+    }
+    prevTxLen.current = recentTransactions.length;
+  }, [recentTransactions?.length]);
 
   const usdRate = bootstrap?.usd_rate || 90;
   const rates = bootstrap || { usd_rate: 90 };
@@ -326,7 +339,12 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
           </div>
         </div>
         <div style={{ fontSize: 36, fontWeight: 800, color: T.text, fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}>
-          <AnimatedNumber value={Math.round(activeBalance)} suffix=" ₽" />
+          <span
+            className={balanceWave === "red" ? "bal-wave-red" : balanceWave === "green" ? "bal-wave-green" : ""}
+            style={{ display: "inline-block", padding: "2px 6px", marginLeft: -6, borderRadius: 10 }}
+          >
+            <AnimatedNumber value={Math.round(activeBalance)} suffix=" ₽" />
+          </span>
         </div>
         {reserveBalance > 0 && (
           <div style={{ fontSize: 13, color: T.muted, marginTop: 4 }}>
@@ -348,6 +366,22 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
       {tickerItems.length > 0 && (
         <div style={{ margin: "16px 0 0" }}>
           <Ticker items={tickerItems} />
+        </div>
+      )}
+
+      {/* Live feed */}
+      {recentTransactions && recentTransactions.length > 0 && (
+        <div style={{ padding: "16px 16px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+            <div
+              className="live-pulse-dot"
+              style={{ width: 8, height: 8, borderRadius: "50%", background: T.em, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 12, color: T.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.6 }}>
+              Живая лента
+            </span>
+          </div>
+          <LiveFeed transactions={recentTransactions} />
         </div>
       )}
 
