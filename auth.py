@@ -1,12 +1,12 @@
 """
 auth.py — аутентификация: Telegram initData, сессии, локальный вход.
 """
-import hmac, hashlib, json, sqlite3, secrets, urllib.parse
+import hmac, hashlib, json, secrets, urllib.parse
 from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
 
-from db import DB_PATH, get_db, qone, commit
+from db import get_db, qone, commit
 from db import DEFAULT_ACCOUNTS, DEFAULT_CATEGORIES, DEFAULT_SUBS
 from db import calc_next_date_from_billing_day
 
@@ -120,7 +120,7 @@ def seed_user_if_new(user_id: str):
                 (user_id, cat_id, limit_amt),
             )
 
-    db.commit()
+    commit()
 
 
 # ──────────────────────────────────────────────
@@ -146,12 +146,7 @@ def authenticate():
 
     token = request.headers.get("X-Session-Token", "")
     if token:
-        db  = sqlite3.connect(DB_PATH)
-        db.row_factory = sqlite3.Row
-        row = db.execute(
-            "SELECT user_id, expires_at FROM sessions WHERE token=?", (token,)
-        ).fetchone()
-        db.close()
+        row = qone("SELECT user_id, expires_at FROM sessions WHERE token=?", (token,))
         if row and row["expires_at"] > datetime.utcnow().isoformat():
             g.user_id = row["user_id"]
             seed_user_if_new(row["user_id"])
@@ -192,25 +187,21 @@ def _verify_password(password: str, stored_hash: str) -> bool:
         return hmac.compare_digest(old_dk.hex(), stored_hash)
 
 def _get_local_user(username: str):
-    db  = sqlite3.connect(DB_PATH)
-    db.row_factory = sqlite3.Row
-    row = db.execute(
+    row = qone(
         "SELECT value FROM settings WHERE user_id=? AND key='local_password_hash'",
         (f"local_{username}",)
-    ).fetchone()
-    db.close()
+    )
     return {"user_id": f"local_{username}", "hash": row["value"]} if row else None
 
 def _create_session(user_id: str) -> str:
     token   = secrets.token_hex(32)
     expires = (datetime.utcnow() + timedelta(days=SESSION_DAYS)).isoformat()
-    db = sqlite3.connect(DB_PATH)
+    db = get_db()
     db.execute("DELETE FROM sessions WHERE expires_at < ? OR user_id=?",
                (datetime.utcnow().isoformat(), user_id))
     db.execute("INSERT INTO sessions(token, user_id, expires_at) VALUES(?,?,?)",
                (token, user_id, expires))
-    db.commit()
-    db.close()
+    commit()
     return token
 
 
@@ -220,11 +211,7 @@ def _create_session(user_id: str) -> str:
 @auth_bp.route("/api/auth/status")
 def api_auth_status():
     tg_active = bool(BOT_TOKEN)
-    db  = sqlite3.connect(DB_PATH)
-    row = db.execute(
-        "SELECT 1 FROM settings WHERE key='local_password_hash' LIMIT 1"
-    ).fetchone()
-    db.close()
+    row = qone("SELECT 1 AS v FROM settings WHERE key='local_password_hash' LIMIT 1")
     return jsonify({"telegram": tg_active, "local_auth_configured": bool(row)})
 
 
@@ -245,22 +232,15 @@ def api_auth_setup():
     if _get_local_user(username):
         return jsonify({"error": "Пользователь уже существует"}), 409
 
-    db = sqlite3.connect(DB_PATH)
+    db = get_db()
     db.execute(
         "INSERT INTO settings(user_id, key, value) VALUES(?,?,?)",
         (user_id, "local_password_hash", _hash_password(password))
     )
-    db.commit()
-    db.close()
+    commit()
 
-    from flask import current_app
-    with current_app.app_context():
-        g._db = sqlite3.connect(DB_PATH)
-        g._db.row_factory = sqlite3.Row
-        g._db.execute("PRAGMA journal_mode=WAL")
-        g.user_id = user_id
-        seed_user_if_new(user_id)
-        g._db.close()
+    g.user_id = user_id
+    seed_user_if_new(user_id)
 
     token = _create_session(user_id)
     return jsonify({"ok": True, "token": token, "user_id": user_id})
@@ -285,13 +265,11 @@ def api_auth_login():
     # Автоматически обновляем старый v1-хэш до v2 при успешном входе
     if not user["hash"].startswith("v2:"):
         new_hash = _hash_password(password)
-        db = sqlite3.connect(DB_PATH)
-        db.execute(
+        get_db().execute(
             "UPDATE settings SET value=? WHERE user_id=? AND key='local_password_hash'",
             (new_hash, user["user_id"]),
         )
-        db.commit()
-        db.close()
+        commit()
 
     token = _create_session(user["user_id"])
     return jsonify({"ok": True, "token": token, "user_id": user["user_id"]})
@@ -301,8 +279,6 @@ def api_auth_login():
 def api_auth_logout():
     token = request.headers.get("X-Session-Token", "")
     if token:
-        db = sqlite3.connect(DB_PATH)
-        db.execute("DELETE FROM sessions WHERE token=?", (token,))
-        db.commit()
-        db.close()
+        get_db().execute("DELETE FROM sessions WHERE token=?", (token,))
+        commit()
     return jsonify({"ok": True})
