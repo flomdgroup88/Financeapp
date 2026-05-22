@@ -263,19 +263,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
 
   return (
     <div style={{ padding: "0 0 calc(88px + env(safe-area-inset-bottom))" }}>
-      {/* Offline banner */}
-      {isOffline && (
-        <div style={{
-          margin: "8px 16px 0", padding: "8px 12px", borderRadius: 10,
-          background: `${T.gold}18`, border: `1px solid ${T.gold}40`,
-          display: "flex", alignItems: "center", gap: 8,
-        }}>
-          <span style={{ fontSize: 16 }}>📡</span>
-          <span style={{ fontSize: 12, color: T.gold, fontWeight: 600 }}>
-            Нет сети — показаны данные из кэша
-          </span>
-        </div>
-      )}
+      {/* Offline banner теперь глобальный в App.jsx */}
       {/* Header balance */}
       <div style={{ padding: "20px 16px 0" }}>
         <div style={{ fontSize: 12, color: T.muted, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 }}>

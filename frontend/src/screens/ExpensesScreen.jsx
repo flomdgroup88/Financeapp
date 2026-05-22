@@ -6,6 +6,7 @@ import { fmt, monthRange } from "../utils";
 import { Card, MonthNav, DonutChart, ProgressBar, Button, Skeleton, EmptyState, Spinner } from "../components/ui";
 import BudgetsModal from "../modals/BudgetsModal";
 import TransactionModal from "../modals/TransactionModal";
+import useCache from "../hooks/useCache";
 
 // ─── Category drill-down overlay ─────────────────────────────────────────────
 function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
@@ -226,9 +227,12 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
   const [showBudgets, setShowBudgets] = useState(false);
   const [selectedCat, setSelectedCat] = useState(null);
 
+  const { getOfflineCache, setCache } = useCache();
+
   useEffect(() => {
     async function load() {
       setLoading(true);
+      const cacheKey = `expenses-${year}-${String(month).padStart(2, "0")}`;
       try {
         const [s, b] = await Promise.all([
           get(`/api/stats/monthly?year=${year}&month=${month}`),
@@ -236,7 +240,16 @@ export default function ExpensesScreen({ bootstrap, onRefresh }) {
         ]);
         setStats(s);
         setBudgets(b.budget_limits || []);
-      } catch {}
+        // Сохраняем для офлайна
+        setCache(cacheKey, { stats: s, budgets: b.budget_limits || [] });
+      } catch {
+        // Офлайн — берём из кэша
+        const cached = await getOfflineCache(cacheKey);
+        if (cached) {
+          setStats(cached.stats);
+          setBudgets(cached.budgets);
+        }
+      }
       setLoading(false);
     }
     load();

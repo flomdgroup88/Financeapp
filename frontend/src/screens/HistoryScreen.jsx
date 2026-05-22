@@ -3,6 +3,7 @@ import { T } from "../theme";
 import { get } from "../api";
 import { fmt, fmtDate, groupByDate, toRub } from "../utils";
 import { Card, Skeleton, Button, EmptyState, SegmentedControl } from "../components/ui";
+import useCache from "../hooks/useCache";
 
 const PRESETS = [
   { label: "Сегодня", value: "today" },
@@ -47,6 +48,7 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
   const usdRate = bootstrap?.usd_rate || 90;
 
   const LIMIT = 30;
+  const { getOfflineCache, setCache } = useCache();
 
   const load = useCallback(async (reset = false) => {
     const off = reset ? 0 : offset;
@@ -64,13 +66,29 @@ export default function HistoryScreen({ bootstrap, onOpenEditTransaction }) {
       if (reset) {
         setTransactions(data.transactions || []);
         setOffset(LIMIT);
+        // Сохраняем в кэш для офлайна (только первую страницу, без поиска)
+        if (!search.trim() && off === 0) {
+          const cacheKey = `history-${preset}-${typeFilter}`;
+          setCache(cacheKey, data);
+        }
       } else {
         setTransactions(prev => [...prev, ...(data.transactions || [])]);
         setOffset(off + LIMIT);
       }
       setStats(data.stats);
       setHasMore((data.transactions || []).length === LIMIT);
-    } catch {}
+    } catch {
+      // Нет сети — показываем офлайн-кэш (только при первой загрузке, без поиска)
+      if (reset && !search.trim()) {
+        const cacheKey = `history-${preset}-${typeFilter}`;
+        const cached = await getOfflineCache(cacheKey);
+        if (cached) {
+          setTransactions(cached.transactions || []);
+          setStats(cached.stats);
+          setHasMore(false); // в офлайне пагинация недоступна
+        }
+      }
+    }
     setLoading(false);
   }, [preset, typeFilter, search, offset]);
 
