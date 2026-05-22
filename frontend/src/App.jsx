@@ -40,7 +40,7 @@ export default function App() {
   const [profileOpen, setProfile] = useState(false);
 
   // Bootstrap
-  const { data: bootstrap, loading: bsLoading, refresh: refreshBootstrap } = useBootstrap();
+  const { data: bootstrap, loading: bsLoading, refresh: refreshBootstrap, patch: patchBootstrap } = useBootstrap();
 
   // XP
   const xpData = useXP(bootstrap?.gamification);
@@ -91,40 +91,58 @@ export default function App() {
       }
 
       // Achievement checks
-      // Streak checks
       if (newStreak >= 3)  achievements.checkAndUnlock("streak_3");
       if (newStreak >= 7)  achievements.checkAndUnlock("streak_7");
       if (newStreak >= 14) achievements.checkAndUnlock("streak_14");
       if (newStreak >= 30) achievements.checkAndUnlock("streak_30");
     }
-    refreshBootstrap();
+    // Транзакция меняет только балансы счетов — патчим только accounts
+    try {
+      const res = await get("/api/accounts");
+      patchBootstrap({ accounts: res.accounts });
+    } catch { refreshBootstrap(); }
     addToast("Транзакция сохранена", "success");
   }
 
   function onAccountSaved() {
-    refreshBootstrap();
+    // Счёт меняет только список счетов
+    get("/api/accounts")
+      .then(res => patchBootstrap({ accounts: res.accounts }))
+      .catch(() => refreshBootstrap());
     addToast("Счёт сохранён", "success");
     achievements.checkAndUnlock("reserve_exists");
   }
 
   function onSubSaved() {
-    refreshBootstrap();
+    // Подписка меняет только subscriptions
+    get("/api/subscriptions")
+      .then(res => patchBootstrap({ subscriptions: res.subscriptions }))
+      .catch(() => refreshBootstrap());
     addToast("Подписка сохранена", "success");
   }
 
   function onTransferSaved() {
-    refreshBootstrap();
+    // Перевод меняет только балансы счетов
+    get("/api/accounts")
+      .then(res => patchBootstrap({ accounts: res.accounts }))
+      .catch(() => refreshBootstrap());
     addToast("Перевод выполнен", "success");
     achievements.checkAndUnlock("transfer_first");
   }
 
   function onGoalSaved() {
-    refreshBootstrap();
+    // Цель меняет только goals
+    get("/api/goals")
+      .then(res => patchBootstrap({ goals: res.goals }))
+      .catch(() => refreshBootstrap());
     achievements.checkAndUnlock("goal_created");
   }
 
   function onPlannedSaved() {
-    refreshBootstrap();
+    // Плановое поступление меняет только planned_income
+    get("/api/planned-income")
+      .then(res => patchBootstrap({ planned_income: res.planned_income }))
+      .catch(() => refreshBootstrap());
     addToast("Поступление сохранено", "success");
   }
 
