@@ -18,6 +18,8 @@ def transactions():
         for key, col in (("type","t.type"), ("account_id","t.account_id"), ("category_id","t.category_id")):
             if request.args.get(key):
                 clauses.append(f"{col}=?"); params.append(request.args[key])
+        if request.args.get("goal") == "1":
+            clauses.append("t.goal_id IS NOT NULL")
         if request.args.get("start_date"):
             clauses.append("t.date>=?"); params.append(request.args["start_date"])
         if request.args.get("end_date"):
