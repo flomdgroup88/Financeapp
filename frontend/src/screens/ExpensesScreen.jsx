@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { T } from "../theme";
 import { get } from "../api";
 import { fmt, monthRange } from "../utils";
@@ -45,7 +46,7 @@ function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
     return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
   }
 
-  return (
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -209,7 +210,8 @@ function CategoryOverlay({ cat, year, month, onClose, bootstrap, onRefresh }) {
           onRefresh?.();
         }}
       />
-    </>
+    </>,
+    document.body
   );
 }
 
