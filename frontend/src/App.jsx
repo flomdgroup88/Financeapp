@@ -109,9 +109,6 @@ export default function App() {
     if (txData) {
       // Award XP
       const { xpGained, newStreak } = await xpData.recordTransaction();
-      if (xpGained > 0) {
-        setXpPopup({ amount: xpGained, newXp: xpData.xp + xpGained });
-      }
 
       // Achievement checks
       if (newStreak >= 3)  achievements.checkAndUnlock("streak_3");
@@ -122,6 +119,10 @@ export default function App() {
       // Живая лента + тост
       setRecentTransactions(prev => [txData, ...prev].slice(0, 20));
       setTxToast(txData);
+      // XP-попап появляется с задержкой — чтобы не конкурировал с пульсом
+      if (xpGained > 0) {
+        setTimeout(() => setXpPopup({ amount: xpGained, newXp: xpData.xp + xpGained }), 700);
+      }
     }
     // Транзакция меняет только балансы счетов — патчим только accounts
     try {
