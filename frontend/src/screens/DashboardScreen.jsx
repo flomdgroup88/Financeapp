@@ -14,6 +14,7 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [stats, setStats] = useState(null);
   const [comparison, setComparison] = useState(null);
+  const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const usdRate = bootstrap?.usd_rate || 90;
@@ -46,12 +47,14 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
     async function loadStats() {
       setLoading(true);
       try {
-        const [s, c] = await Promise.all([
+        const [s, c, b] = await Promise.all([
           get(`/api/stats/monthly?year=${year}&month=${month}`),
           get(`/api/stats/comparison`),
+          get(`/api/budget-limits?year=${year}&month=${month}`),
         ]);
         setStats(s);
         setComparison(c);
+        setBudgets(b.budget_limits || []);
       } catch {}
       setLoading(false);
     }
@@ -79,17 +82,171 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
 
   const compChange = comparison?.change_pct || 0;
 
-  // Insights
+  // ── Умные инсайты ────────────────────────────────────────────────────
+  // Каждый инсайт: { id, icon, text, sub?, type: "danger"|"warning"|"positive"|"info" }
   const insights = [];
-  if (stats?.total_expenses > 0 && comparison?.previous?.total > 0) {
-    if (compChange > 20) insights.push(`📈 Расходы вышр нормы на ${compChange}% по сравнению с прошлым месяцем`);
-    else if (compChange < -10) insights.push(`📉 Ты сократил расходы на ${Math.abs(compChange)}% — отлично!`);
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth() + 1;
+  const dayOfMonth   = isCurrentMonth ? now.getDate() : daysInMonth;
+  const daysElapsed  = Math.max(dayOfMonth, 1);
+  const dailyAvg     = totalExp / daysElapsed;
+
+  // 1. Бюджеты: превышение или близко к лимиту
+  budgets.forEach(b => {
+    const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0;
+    if (pct >= 100) {
+      insights.push({
+        id: `budget-over-${b.category_id}`,
+        icon: b.category_icon || "⚠️",
+        text: `«${b.category_name}» — бюджет превышен`,
+        sub: `потрачено ${fmt(b.spent)} из ${fmt(b.amount)}`,
+        type: "danger",
+        priority: 1,
+      });
+    } else if (pct >= 80 && isCurrentMonth) {
+      insights.push({
+        id: `budget-near-${b.category_id}`,
+        icon: b.category_icon || "🟡",
+        text: `«${b.category_name}» — использовано ${Math.round(pct)}% бюджета`,
+        sub: `осталось ${fmt(b.amount - b.spent)}`,
+        type: "warning",
+        priority: 2,
+      });
+    }
+  });
+
+  // 2. Прогноз трат до конца месяца (только для текущего месяца)
+  if (isCurrentMonth && totalExp > 0 && daysElapsed < daysInMonth) {
+    const projected = Math.round(dailyAvg * daysInMonth);
+    const prevTotal = comparison?.previous?.total || 0;
+    if (prevTotal > 0) {
+      const projDiff = Math.round(((projected - prevTotal) / prevTotal) * 100);
+      if (projDiff >= 15) {
+        insights.push({
+          id: "pace-high",
+          icon: "📈",
+          text: `При таком темпе к концу месяца — ${fmt(projected)}`,
+          sub: `это на ${projDiff}% больше прошлого месяца`,
+          type: "warning",
+          priority: 2,
+        });
+      } else if (projDiff <= -10) {
+        insights.push({
+          id: "pace-low",
+          icon: "📉",
+          text: `Темп трат ниже прошлого месяца на ${Math.abs(projDiff)}%`,
+          sub: `прогноз до конца месяца: ${fmt(projected)}`,
+          type: "positive",
+          priority: 4,
+        });
+      }
+    }
   }
-  if (topCats[0]) insights.push(`🏆 Больше всего тратишь на «${topCats[0].name}» — ${fmt(topCats[0].total)}`);
-  if (stats?.total_income > stats?.total_expenses && stats?.total_income > 0) {
-    const saved = stats.total_income - stats.total_expenses;
-    insights.push(`💚 Сохранил ${fmt(saved)} в этом месяце`);
+
+  // 3. Самый большой скачок категории (абсолютный прирост)
+  if (comparison?.comparison?.length > 0) {
+    const biggestJump = [...(comparison.comparison)]
+      .filter(c => c.curr_amount > 0 && c.prev_amount > 0)
+      .sort((a, b) => (b.curr_amount - b.prev_amount) - (a.curr_amount - a.prev_amount))[0];
+    if (biggestJump && biggestJump.curr_amount > biggestJump.prev_amount) {
+      const diff = biggestJump.curr_amount - biggestJump.prev_amount;
+      insights.push({
+        id: "cat-spike",
+        icon: biggestJump.icon || "🔺",
+        text: `«${biggestJump.name}» выросло сильнее всего`,
+        sub: `+${fmt(diff)} vs прошлый месяц (+${biggestJump.change_pct}%)`,
+        type: "info",
+        priority: 3,
+      });
+    }
+
+    // 4. Новая категория (не было в прошлом месяце)
+    const newCat = comparison.comparison.find(c => c.curr_amount > 0 && c.prev_amount === 0);
+    if (newCat) {
+      insights.push({
+        id: "cat-new",
+        icon: newCat.icon || "✨",
+        text: `Новая категория трат — «${newCat.name}»`,
+        sub: `${fmt(newCat.curr_amount)} в этом месяце`,
+        type: "info",
+        priority: 3,
+      });
+    }
   }
+
+  // 5. Аномальный день — самый дорогой vs средний
+  if (stats?.daily?.length > 1) {
+    const maxDayObj = stats.daily.reduce((a, b) => b.total > a.total ? b : a, stats.daily[0]);
+    if (maxDayObj && dailyAvg > 0 && maxDayObj.total > dailyAvg * 2.5) {
+      const dayNum = new Date(maxDayObj.date + "T00:00:00").getDate();
+      insights.push({
+        id: "spike-day",
+        icon: "⚡",
+        text: `${dayNum} числа потрачено ${fmt(maxDayObj.total)}`,
+        sub: `в ${Math.round(maxDayObj.total / dailyAvg)}x больше среднего дня`,
+        type: "info",
+        priority: 3,
+      });
+    }
+  }
+
+  // 6. Норма сбережений
+  if (stats?.total_income > 0 && stats?.total_expenses > 0) {
+    const saved    = stats.total_income - stats.total_expenses;
+    const saveRate = Math.round((saved / stats.total_income) * 100);
+    if (saved > 0) {
+      insights.push({
+        id: "savings",
+        icon: "💚",
+        text: `Норма сбережений ${saveRate}% — ${fmt(saved)}`,
+        sub: saveRate >= 20 ? "отличный результат!" : "есть куда расти",
+        type: saveRate >= 20 ? "positive" : "info",
+        priority: saveRate >= 20 ? 3 : 4,
+      });
+    } else {
+      insights.push({
+        id: "overspend",
+        icon: "🔴",
+        text: `Расходы превысили доходы на ${fmt(Math.abs(saved))}`,
+        sub: "доходы: " + fmt(stats.total_income),
+        type: "danger",
+        priority: 1,
+      });
+    }
+  }
+
+  // 7. Сравнение с прошлым месяцем (если нет прогноза)
+  if (!insights.find(i => i.id === "pace-high" || i.id === "pace-low")) {
+    if (compChange > 20 && comparison?.previous?.total > 0) {
+      insights.push({
+        id: "comp-high",
+        icon: "📊",
+        text: `Расходы выше прошлого месяца на ${compChange}%`,
+        sub: `прошлый месяц: ${fmt(comparison.previous.total)}`,
+        type: "warning",
+        priority: 2,
+      });
+    } else if (compChange < -10 && comparison?.previous?.total > 0) {
+      insights.push({
+        id: "comp-low",
+        icon: "📊",
+        text: `Расходы ниже прошлого месяца на ${Math.abs(compChange)}%`,
+        sub: `сэкономлено ${fmt(comparison.previous.total - totalExp)}`,
+        type: "positive",
+        priority: 4,
+      });
+    }
+  }
+
+  // Сортируем по приоритету, берём топ-5
+  insights.sort((a, b) => a.priority - b.priority);
+  const topInsights = insights.slice(0, 5);
+
+  const insightColors = {
+    danger:   { bg: `${T.red}12`,  border: `${T.red}30`,  text: T.red  },
+    warning:  { bg: `${T.gold}12`, border: `${T.gold}30`, text: T.gold },
+    positive: { bg: `${T.em}12`,   border: `${T.em}30`,   text: T.em   },
+    info:     { bg: `${T.blue}12`, border: `${T.blue}30`, text: T.blue },
+  };
 
   return (
     <div style={{ padding: "0 0 calc(88px + env(safe-area-inset-bottom))" }}>
@@ -204,16 +361,32 @@ export default function DashboardScreen({ bootstrap, onAddTransaction, onOpenGoa
       </div>
 
       {/* Insights */}
-      {insights.length > 0 && (
+      {topInsights.length > 0 && (
         <div style={{ padding: "16px 16px 0" }}>
-          <Card accent={T.gold}>
-            <div style={{ fontSize: 13, color: T.gold, marginBottom: 10, fontWeight: 700 }}>💡 Умные инсайты</div>
-            {insights.map((tip, i) => (
-              <div key={i} style={{ fontSize: 13, color: T.text, padding: "6px 0", borderTop: i > 0 ? `1px solid ${T.brdDim}` : "none" }}>
-                {tip}
-              </div>
-            ))}
-          </Card>
+          <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+            💡 <span>Умные инсайты</span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: T.sub }}>{topInsights.length} из {insights.length}</span>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {topInsights.map(ins => {
+              const c = insightColors[ins.type];
+              return (
+                <div key={ins.id} style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "11px 14px", borderRadius: 12,
+                  background: c.bg, border: `1px solid ${c.border}`,
+                }}>
+                  <span style={{ fontSize: 20, flexShrink: 0 }}>{ins.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: T.text, lineHeight: 1.3 }}>{ins.text}</div>
+                    {ins.sub && (
+                      <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{ins.sub}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
