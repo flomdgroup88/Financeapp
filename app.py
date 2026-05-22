@@ -14,6 +14,7 @@ from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_compress import Compress
 import backup as bkp
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -22,6 +23,7 @@ BOT_TOKEN      = os.environ.get("BOT_TOKEN", "")
 ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "")
 
 app = Flask(__name__, static_folder="static")
+Compress(app)
 
 if ALLOWED_ORIGIN:
     CORS(app, origins=[ALLOWED_ORIGIN])
