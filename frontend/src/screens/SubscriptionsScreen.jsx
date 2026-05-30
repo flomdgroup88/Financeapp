@@ -59,6 +59,21 @@ export default function SubscriptionsScreen({ bootstrap, onRefresh, onOpenSubscr
               <span style={{ fontSize: 11, color: T.muted }}>
                 {sub.period === "yearly" ? "Ежегодно" : "Ежемесячно"}
               </span>
+              {sub.auto_charge ? (
+                <span style={{
+                  fontSize: 10, padding: "2px 6px", borderRadius: 4, fontWeight: 700,
+                  background: `${T.em}20`, color: T.em,
+                }}>
+                  ⚡ Авто
+                </span>
+              ) : (
+                <span style={{
+                  fontSize: 10, padding: "2px 6px", borderRadius: 4, fontWeight: 600,
+                  background: T.bg3, color: T.muted,
+                }}>
+                  Вручную
+                </span>
+              )}
               {sub.next_date && sub.is_active && (
                 <span style={{
                   fontSize: 11, padding: "2px 6px", borderRadius: 4,
