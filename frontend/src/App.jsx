@@ -22,15 +22,13 @@ import PlannedModal      from "./modals/PlannedModal";
 import TopBar            from "./components/TopBar";
 import BottomNav         from "./components/BottomNav";
 import XPGainPopup       from "./components/XPGainPopup";
-import { Toast, AchievementToast, TransactionToast } from "./components/ui";
+import { Toast, AchievementToast, TransactionToast, SubscriptionToast } from "./components/ui";
 
 import useXP             from "./hooks/useXP";
 import useAchievements   from "./hooks/useAchievements";
 import useBootstrap      from "./hooks/useBootstrap";
 import useOffline        from "./hooks/useOffline";
 import OfflineBanner     from "./components/OfflineBanner";
-
-import { get } from "./api";
 
 injectCSS("app-scroll", `
   @keyframes offlineBannerIn {
@@ -59,6 +57,7 @@ export default function App() {
   const [xpPopup, setXpPopup]       = useState(null);
   const [achToast, setAchToast]     = useState(null);
   const [txToast, setTxToast]       = useState(null);
+  const [subToast, setSubToast]     = useState(null);
   const [recentTransactions, setRecentTransactions] = useState([]);
 
   // Подгружаем последние транзакции при старте — чтобы LiveFeed сразу показывался
@@ -140,12 +139,18 @@ export default function App() {
     achievements.checkAndUnlock("reserve_exists");
   }
 
-  function onSubSaved() {
+  function onSubSaved(subData) {
     // Подписка меняет только subscriptions
     get("/api/subscriptions")
       .then(res => patchBootstrap({ subscriptions: res.subscriptions }))
       .catch(() => refreshBootstrap());
-    addToast("Подписка сохранена", "success");
+    if (subData?.deleted) {
+      addToast(subData.name ? `Подписка «${subData.name}» удалена` : "Подписка удалена", "success");
+    } else if (subData?.name) {
+      setSubToast(subData);
+    } else {
+      addToast("Подписка сохранена", "success");
+    }
   }
 
   function onTransferSaved() {
@@ -347,6 +352,13 @@ export default function App() {
         <TransactionToast
           tx={txToast}
           onDone={() => setTxToast(null)}
+        />
+      )}
+
+      {subToast && (
+        <SubscriptionToast
+          sub={subToast}
+          onDone={() => setSubToast(null)}
         />
       )}
 
