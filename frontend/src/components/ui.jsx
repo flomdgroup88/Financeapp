@@ -799,6 +799,70 @@ export function TransactionToast({ tx, onDone }) {
   );
 }
 
+// ── SubscriptionToast ─────────────────────────────────────────────────
+export function SubscriptionToast({ sub, onDone }) {
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (navigator.vibrate) navigator.vibrate([15, 40, 20]);
+    const t = setTimeout(() => {
+      setLeaving(true);
+      setTimeout(onDone, 350);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const color  = sub.color || T.cyan;
+  const symbol = { RUB: "₽", USD: "$", EUR: "€", CNY: "¥", GBP: "£" }[sub.currency] || sub.currency || "₽";
+  const num    = Math.abs(sub.amount || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+  const per    = sub.period === "yearly" ? "/год" : "/мес";
+  const amtStr = symbol === "₽" ? `${num} ₽` : `${symbol}${num}`;
+  const sub2   = `${sub.isNew ? "Подписка добавлена" : "Подписка обновлена"} · ${sub.period === "yearly" ? "Ежегодно" : "Ежемесячно"}`;
+
+  return (
+    <div
+      className={leaving ? "tx-toast-out" : "tx-toast-in"}
+      style={{
+        position: "fixed",
+        bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)",
+        left: 12, right: 12,
+        zIndex: 1500,
+        background: T.bg1,
+        borderRadius: 16,
+        border: `1px solid ${color}35`,
+        padding: "13px 16px",
+        display: "flex", alignItems: "center", gap: 12,
+        cursor: "pointer",
+        maxWidth: 480,
+        margin: "0 auto",
+      }}
+      onClick={() => { setLeaving(true); setTimeout(onDone, 350); }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 12,
+        background: `${color}18`,
+        border: `1px solid ${color}40`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 20, flexShrink: 0,
+      }}>
+        {sub.icon || "🔔"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, color: T.text, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {sub.name || "Подписка"}
+        </div>
+        <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+          {sub2}
+        </div>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 800, color, fontVariantNumeric: "tabular-nums", flexShrink: 0, textAlign: "right" }}>
+        {amtStr}
+        <span style={{ fontSize: 10, color: T.muted, fontWeight: 600 }}>{per}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── LiveFeed ──────────────────────────────────────────────────────────
 const FEED_MAX = 5;
 
