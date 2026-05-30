@@ -49,13 +49,13 @@ def recurring():
     period       = d.get("period", "monthly")
     day_of_month = int(d.get("day_of_month") or 1) if period == "monthly" else None
     next_date    = calc_next_recurring_date(period, day_of_month)
-    q("INSERT INTO recurring_transactions(user_id,name,amount,type,category_id,account_id,period,day_of_month,next_date,description,icon,color) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+    cur = q("INSERT INTO recurring_transactions(user_id,name,amount,type,category_id,account_id,period,day_of_month,next_date,description,icon,color) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
       (uid(), d["name"], amount, d.get("type", "expense"),
        d.get("category_id") or None, d.get("account_id") or None,
        period, day_of_month, next_date,
        d.get("description", ""), d.get("icon", "🔄"), d.get("color", "#6366f1")))
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": cur.lastrowid})
 
 
 @recurring_bp.route("/api/recurring/<int:rid>", methods=["PUT", "DELETE"])
