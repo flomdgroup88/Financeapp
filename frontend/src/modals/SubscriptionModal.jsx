@@ -14,6 +14,8 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
   const [currency, setCurrency] = useState("RUB");
   const [period, setPeriod]     = useState("monthly");
   const [billingDay, setBillingDay] = useState("1");
+  const [nextDate, setNextDate]     = useState("");
+  const [autoCharge, setAutoCharge] = useState(false);
   const [accountId, setAccountId]   = useState("");
   const [icon, setIcon]   = useState("🔔");
   const [color, setColor] = useState("#06B6D4");
@@ -28,6 +30,10 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
       setCurrency(s?.currency || "RUB");
       setPeriod(s?.period || "monthly");
       setBillingDay(String(s?.billing_day || "1"));
+      const inYear = new Date();
+      inYear.setFullYear(inYear.getFullYear() + 1);
+      setNextDate(s?.next_date || inYear.toISOString().slice(0, 10));
+      setAutoCharge(!!s?.auto_charge);
       setAccountId(String(s?.account_id || accounts[0]?.id || ""));
       setIcon(s?.icon || "🔔");
       setColor(s?.color || "#06B6D4");
@@ -45,7 +51,9 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
       const body = {
         name: name.trim(), amount: amt, currency, period,
         billing_day: period === "monthly" ? parseInt(billingDay) : null,
+        next_date: period === "yearly" ? (nextDate || null) : null,
         account_id: accountId ? parseInt(accountId) : null,
+        auto_charge: autoCharge ? 1 : 0,
         icon, color,
       };
       let result;
@@ -57,7 +65,11 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
         onSaved && onSaved();
         return;
       }
-      onSaved && onSaved();
+      onSaved && onSaved({
+        name: body.name, amount: body.amount, currency: body.currency,
+        period: body.period, icon: body.icon, color: body.color,
+        isNew: !subscription?.id,
+      });
       onClose();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -68,7 +80,7 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
     setLoading(true);
     try {
       await del(`/api/subscriptions/${subscription.id}`);
-      onSaved && onSaved();
+      onSaved && onSaved({ deleted: true, name: subscription.name });
       onClose();
     } catch (e) { setError(e.message); }
     setLoading(false);
@@ -101,9 +113,38 @@ export default function SubscriptionModal({ open, onClose, onSaved, subscription
             placeholder="1" hint="День месяца (1-31)" />
         )}
 
+        {period === "yearly" && (
+          <Input label="Дата следующего списания" type="date" value={nextDate} onChange={setNextDate}
+            hint="Когда списать в следующий раз" />
+        )}
+
         <Select label="Счёт списания" value={accountId} onChange={setAccountId}
           options={[{ value: "", label: "Не указан" }, ...accounts.map(a => ({ value: String(a.id), label: `${a.icon || "💰"} ${a.name}` }))]} />
 
+        {/* Автосписание */}
+        <div style={{ background: T.bg3, borderRadius: 10, padding: "12px 14px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 14, color: T.text }}>⚡ Автосписание</span>
+            <div
+              style={{
+                width: 44, height: 26, borderRadius: 13, cursor: "pointer", position: "relative",
+                background: autoCharge ? T.em : T.brd, transition: "background 0.2s",
+              }}
+              onClick={() => setAutoCharge(v => !v)}
+            >
+              <div style={{
+                position: "absolute", top: 3, left: autoCharge ? 21 : 3,
+                width: 20, height: 20, borderRadius: "50%", background: "#fff",
+                transition: "left 0.2s",
+              }} />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 8, lineHeight: 1.4 }}>
+            {autoCharge
+              ? "Спишется само при наступлении даты, когда откроешь приложение."
+              : "Не списывается само — жми «Списать сейчас», когда оплатишь."}
+          </div>
+        </div>
         <div>
           <div style={{ fontSize: 12, color: T.muted, marginBottom: 8, fontWeight: 600 }}>Цвет</div>
           <ColorPicker value={color} onChange={setColor} />
