@@ -7,6 +7,7 @@ import calendar
 from flask import Blueprint, jsonify, request, g, send_from_directory, send_file
 
 from db import q, qone, qall, commit, uid, get_db, DB_PATH
+from routes.subscriptions import process_due_auto_charges
 
 accounts_bp = Blueprint("accounts", __name__)
 
@@ -14,6 +15,7 @@ accounts_bp = Blueprint("accounts", __name__)
 def bootstrap():
     """Возвращает все начальные данные одним запросом."""
     u = uid()
+    process_due_auto_charges(u)  # догоняем автосписания подписок по наступившим датам
     settings_rows = {r["key"]: r["value"] for r in qall("SELECT key,value FROM settings WHERE user_id=?", (u,))}
     return jsonify({
         "accounts":      qall("SELECT * FROM accounts WHERE user_id=? ORDER BY sort_order, id", (u,)),
@@ -50,12 +52,12 @@ def accounts():
     if d.get("is_priority"):
         q("UPDATE accounts SET is_priority=0 WHERE user_id=?", (uid(),))
     max_order = qone("SELECT COALESCE(MAX(sort_order),0) AS v FROM accounts WHERE user_id=?", (uid(),))["v"]
-    q("INSERT INTO accounts(user_id,name,balance,currency,icon,color,is_priority,is_reserve,sort_order) VALUES(?,?,?,?,?,?,?,?,?)",
+    cur = q("INSERT INTO accounts(user_id,name,balance,currency,icon,color,is_priority,is_reserve,sort_order) VALUES(?,?,?,?,?,?,?,?,?)",
       (uid(), d["name"], d.get("balance", 0), d.get("currency", "RUB"),
        d.get("icon", "💰"), d.get("color", "#6366f1"),
        int(bool(d.get("is_priority"))), int(bool(d.get("is_reserve"))), max_order + 1))
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": cur.lastrowid})
 
 
 @accounts_bp.route("/api/accounts/<int:aid>", methods=["PUT", "DELETE"])
