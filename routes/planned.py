@@ -21,10 +21,10 @@ def planned_income():
         return jsonify({"planned_income": qall(
             "SELECT * FROM planned_income WHERE user_id=? ORDER BY expected_date, id", (uid(),))})
     d = request.get_json(force=True)
-    q("INSERT INTO planned_income(user_id,amount,description,expected_date) VALUES(?,?,?,?)",
+    cur = q("INSERT INTO planned_income(user_id,amount,description,expected_date) VALUES(?,?,?,?)",
       (uid(), float(d.get("amount", 0)), d.get("description", ""), d.get("expected_date")))
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": cur.lastrowid})
 
 
 @planned_bp.route("/api/planned-income/<int:pid>/receive", methods=["PUT"])
