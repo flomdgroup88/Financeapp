@@ -44,11 +44,11 @@ def budget_limits():
         q("DELETE FROM budget_limits WHERE user_id=? AND category_id=?", (uid(), cat_id))
         commit()
         return jsonify({"ok": True, "deleted": True})
-    q("INSERT INTO budget_limits(user_id, category_id, amount) VALUES(?,?,?) "
+    cur = q("INSERT INTO budget_limits(user_id, category_id, amount) VALUES(?,?,?) "
       "ON CONFLICT(user_id, category_id) DO UPDATE SET amount=excluded.amount",
       (uid(), cat_id, amount))
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": cur.lastrowid})
 
 
 @budgets_bp.route("/api/budget-limits/<int:bid>", methods=["DELETE"])
