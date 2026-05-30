@@ -22,12 +22,12 @@ def goals():
     target = float(d.get("target_amount", 0))
     if target <= 0:
         return jsonify({"error": "target_amount must be > 0"}), 400
-    q("INSERT INTO savings_goals(user_id,name,target_amount,saved_amount,icon,color,description,deadline) VALUES(?,?,?,?,?,?,?,?)",
+    cur = q("INSERT INTO savings_goals(user_id,name,target_amount,saved_amount,icon,color,description,deadline) VALUES(?,?,?,?,?,?,?,?)",
       (uid(), d["name"], target, float(d.get("saved_amount", 0)),
        d.get("icon", "🎯"), d.get("color", "#6366f1"),
        d.get("description", ""), d.get("deadline")))
     commit()
-    return jsonify({"ok": True, "id": get_db().lastrowid})
+    return jsonify({"ok": True, "id": cur.lastrowid})
 
 
 @goals_bp.route("/api/goals/<int:gid>", methods=["PUT", "DELETE"])
