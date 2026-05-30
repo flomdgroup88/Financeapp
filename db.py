@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     icon        TEXT NOT NULL DEFAULT '🔔',
     color       TEXT NOT NULL DEFAULT '#6366f1',
     is_active   INTEGER NOT NULL DEFAULT 1,
+    auto_charge INTEGER NOT NULL DEFAULT 0,
     created_at  TEXT DEFAULT (datetime('now'))
 );
 
@@ -280,6 +281,7 @@ def migrate_db():
         )""",
         "CREATE INDEX IF NOT EXISTS idx_bl_user ON budget_limits(user_id)",
         "ALTER TABLE subscriptions  ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE subscriptions  ADD COLUMN auto_charge INTEGER NOT NULL DEFAULT 0",
         """CREATE TABLE IF NOT EXISTS savings_goals (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id        TEXT NOT NULL DEFAULT 'default',
